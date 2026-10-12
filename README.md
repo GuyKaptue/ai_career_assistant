@@ -90,7 +90,7 @@ system keeps working without network access or paid inference credits.
 | AI/ML | Hugging Face Inference API (chat models; `sentence-transformers/all-MiniLM-L6-v2` embeddings), deterministic feature-hashing fallbacks |
 | Job providers | Remotive, Arbeitnow, Adzuna (HTTP adapters) |
 | Export | ReportLab (PDF), python-docx (DOCX), HTML |
-| Auth | PyJWT (HS256), Supabase JWT claims |
+| Auth | PyJWT (HS256 legacy + ES256/RS256 via Supabase JWKS), Supabase JWT claims |
 | QA | pytest, Vitest, ruff, mypy, bandit, pip-audit, gitleaks |
 | Deployment | Docker Compose, GitHub Actions CI |
 

@@ -1,6 +1,6 @@
 # Third-party licenses
 
-Last audit: 2026-10-09 (generated from `backend/requirements.txt` + `frontend/package.json`; versions pinned in requirements, ranges in pyproject).
+Last audit: 2026-10-12 (generated from `backend/requirements.txt` + `frontend/package.json`; versions pinned in requirements, ranges in pyproject).
 
 This project is distributed under the **MIT License** (see `LICENSE`).
 Every dependency below is permissive (MIT / Apache-2.0 / BSD-3-Clause /
@@ -11,6 +11,7 @@ BSD), so no copyleft obligations apply.
 | Package | Version | License | Compatible with MIT use |
 |---------|---------|---------|-------------------------|
 | bandit | 1.7.10 | Apache-2.0 | Yes |
+| cryptography | 50.0.2 | Apache-2.0/BSD-3-Clause | Yes |
 | fastapi | 0.142.2 | MIT | Yes |
 | httpx | 0.27.2 | BSD-3-Clause | Yes |
 | huggingface_hub | 0.34.3 | Apache-2.0 | Yes |

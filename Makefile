@@ -71,13 +71,13 @@ security:
 
 licenses:
 	@echo "=== Python dependency licenses (backend) ==="
-	cd backend && python3 -m piplicenses --format=plain 2>/dev/null | grep -iE "(fastapi|starlette|uvicorn|python-dotenv|httpx|PyJWT|python-multipart|huggingface_hub|pydantic|pypdf|reportlab|python-docx|PyYAML|tokenizers|Pillow|pytest|pytest-cov|ruff|mypy|bandit|pip-audit|types-PyYAML)" | grep -vE "^(Name| *$$)" || echo "(pip-licenses not installed: pip install pip-licenses)"
+	cd backend && python3 -m piplicenses --format=plain 2>/dev/null | grep -iE "(fastapi|starlette|uvicorn|python-dotenv|httpx|PyJWT|python-multipart|huggingface_hub|pydantic|pypdf|reportlab|python-docx|PyYAML|tokenizers|Pillow|pytest|pytest-cov|ruff|mypy|bandit|cryptography|pip-audit|types-PyYAML)" | grep -vE "^(Name| *$$)" || echo "(pip-licenses not installed: pip install pip-licenses)"
 	@echo ""
 	@echo "=== Frontend dependency licenses ==="
 	cd frontend && npm ls --all --depth=0 2>/dev/null || echo "(npm not available)"
 	@echo ""
 	@echo "=== Copyleft check (direct deps only; must be empty) ==="
-	cd backend && python3 -m piplicenses --format=plain 2>/dev/null | grep -iE "(fastapi|starlette|uvicorn|python-dotenv|httpx|PyJWT|python-multipart|huggingface_hub|pydantic|pypdf|reportlab|python-docx|PyYAML|tokenizers|Pillow|pytest|pytest-cov|ruff|mypy|bandit|pip-audit|types-PyYAML)" | grep -iE "(gpl|lgpl|agpl|affero|mpl|cddl)" && echo "WARNING: copyleft dependency found!" || echo "No copyleft dependencies detected."
+	cd backend && python3 -m piplicenses --format=plain 2>/dev/null | grep -iE "(fastapi|starlette|uvicorn|python-dotenv|httpx|PyJWT|python-multipart|huggingface_hub|pydantic|pypdf|reportlab|python-docx|PyYAML|tokenizers|Pillow|pytest|pytest-cov|ruff|mypy|bandit|cryptography|pip-audit|types-PyYAML)" | grep -iE "(gpl|lgpl|agpl|affero|mpl|cddl)" && echo "WARNING: copyleft dependency found!" || echo "No copyleft dependencies detected."
 
 validate: format-check lint typecheck test coverage security
 

@@ -7,7 +7,8 @@ identity derivation, and cross-user isolation.
 
 ## Responsibilities
 
-- Validate Supabase-issued JWTs (HS256)
+- Validate Supabase-issued JWTs (legacy HS256 shared secret; modern
+  ES256/RS256 via the Supabase JWKS with strict `iss`/`aud` checks)
 - Derive `user_id` from the JWT `sub` claim
 - Reject tokens with weak signing secrets
 - Enforce ownership at the API layer
@@ -28,9 +29,10 @@ core/security/
 
 ## Configuration
 
-- `SUPABASE_JWT_SECRET` — JWT signing secret (min 32 bytes
+- `SUPABASE_JWT_SECRET` — legacy HS256 signing secret (min 32 bytes
   for HS256; shorter secrets raise `RuntimeError`)
-- `SUPABASE_URL` — issuer
+- `SUPABASE_URL` — issuer (`{SUPABASE_URL}/auth/v1`) and JWKS base
+  (`{SUPABASE_URL}/auth/v1/.well-known/jwks.json` for ES256/RS256)
 
 ## Security
 
