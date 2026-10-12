@@ -73,6 +73,10 @@ jobs:
         uses: gitleaks/gitleaks-action@v2
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Explicitly use the repo's allowlist config (known-safe test/UI
+          # strings only). Without it the action still auto-discovers this file,
+          # but being explicit avoids surprises if the default ever changes.
+          GITLEAKS_CONFIG: .gitleaks.toml
 
       - name: License validation
         run: |
