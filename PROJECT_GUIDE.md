@@ -165,19 +165,22 @@ create policy "Users can delete own applications"
   to authenticated
   using ((select auth.uid()) = user_id);
 
--- Auto-create profile on user signup
+-- Auto-create profile on user signup. NOTE: this is now maintained as the
+-- real migration supabase/migrations/20261014000000_handle_new_user_trigger.sql
+-- (the column is user_id, not id; on conflict do nothing keeps it idempotent).
 create or replace function public.handle_new_user()
 returns trigger
 language plpgsql
 security definer set search_path = ''
 as $$
 begin
-  insert into public.profiles (id, email, full_name)
+  insert into public.profiles (user_id, email, full_name)
   values (
     new.id,
-    new.email,
-    coalesce(new.raw_user_meta_data ->> 'full_name', '')
-  );
+    coalesce(new.email, ''),
+    coalesce(new.raw_user_meta_data ->> 'full_name', new.raw_user_meta_data ->> 'name', '')
+  )
+  on conflict (user_id) do nothing;
   return new;
 end;
 $$;

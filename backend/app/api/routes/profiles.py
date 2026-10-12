@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import APIRouter, Depends
 
 from app.api.schemas import COMMON_ERROR_RESPONSES, ProfilePayload
@@ -6,6 +8,8 @@ from app.application.services.document_store import document_store
 from app.application.services.profile_service import profile_store
 from app.core.errors import NotFoundError, ValidationError
 from app.core.security.dependencies import get_current_user
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/v1/profiles", tags=["profiles"], responses=COMMON_ERROR_RESPONSES)
 
@@ -17,7 +21,17 @@ def create_profile(body: ProfilePayload, current_user: dict = Depends(get_curren
     if not email:
         raise ValidationError("email is required.")
     profile_payload = {**payload, "user_id": current_user["sub"], "email": email}
-    profile = profile_store.create(profile_payload)
+    logger.info(
+        "profiles.create request user_id=%s fields=%s",
+        current_user["sub"],
+        sorted(payload),
+    )
+    try:
+        profile = profile_store.create(profile_payload)
+    except Exception:
+        logger.exception("profiles.create FAILED user_id=%s", current_user["sub"])
+        raise
+    logger.info("profiles.create committed user_id=%s", profile.user_id)
     return profile.to_dict()
 
 
@@ -26,6 +40,7 @@ def get_profile(user_id: str, current_user: dict = Depends(get_current_user)) ->
     if user_id != current_user["sub"]:
         raise NotFoundError("Profile not found.")
     profile = profile_store.get(user_id)
+    logger.info("profiles.get user_id=%s found=%s", user_id, profile is not None)
     if profile is None:
         raise NotFoundError("Profile not found.")
     return profile.to_dict()

@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import logging
+
 from app.core.config import settings
 from app.core.persistence import InMemoryRepository, SupabaseRepository
 from app.domain.users.models import UserProfile
+
+logger = logging.getLogger(__name__)
 
 
 class ProfileStore:
@@ -29,17 +33,26 @@ class ProfileStore:
             location=payload.get("location", ""),
             summary=payload.get("summary", ""),
         )
-        if settings.supabase_url and settings.supabase_service_role_key:
-            record = self._backend.create(profile.to_dict())
-            self._profiles[user_id] = record
-            return record
+        backend = "supabase" if settings.supabase_url and settings.supabase_service_role_key else "memory"
+        logger.info("profile_store.create user_id=%s backend=%s", user_id, backend)
+        try:
+            if settings.supabase_url and settings.supabase_service_role_key:
+                record = self._backend.create(profile.to_dict())
+                self._profiles[user_id] = record
+                logger.info("profile_store.create committed user_id=%s backend=supabase", user_id)
+                return record
+        except Exception:
+            logger.exception("profile_store.create FAILED user_id=%s backend=%s", user_id, backend)
+            raise
 
         self._profiles[user_id] = profile
+        logger.info("profile_store.create committed user_id=%s backend=memory", user_id)
         return profile
 
     def get(self, user_id: str) -> UserProfile | None:
         if settings.supabase_url and settings.supabase_service_role_key:
             record = self._backend.get(user_id)
+            logger.info("profile_store.get user_id=%s backend=supabase found=%s", user_id, record is not None)
             if record is not None:
                 self._profiles[user_id] = record
             return record

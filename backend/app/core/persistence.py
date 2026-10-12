@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import logging
 from typing import Any, Callable
 
 import httpx
 
 from app.core.config import settings, validate_supabase_storage
 from app.core.errors import ConfigurationError, DatabaseError
+
+logger = logging.getLogger(__name__)
 
 
 def build_supabase_client(base_url: str, api_key: str) -> httpx.Client:
@@ -161,12 +164,26 @@ class SupabaseRepository:
         )
 
     def create(self, payload: dict[str, Any]) -> Any:
+        key = payload.get(self.key_field)
+        logger.info("persistence.create table=%s key=%s", self.table_name, key)
         try:
             with self._client() as client:
                 response = client.post(f"/rest/v1/{self.table_name}", json=payload)
                 if response.status_code >= 400:
                     if self._is_missing_table_error(response):
+                        logger.warning(
+                            "persistence.create table=%s key=%s -> table missing, using in-memory fallback",
+                            self.table_name,
+                            key,
+                        )
                         return self._fallback_create(payload)
+                    logger.error(
+                        "persistence.create table=%s key=%s -> HTTP %s: %s",
+                        self.table_name,
+                        key,
+                        response.status_code,
+                        response.text,
+                    )
                     raise DatabaseError(
                         "The database rejected the write.",
                         internal=f"Supabase write failed for {self.table_name}: {response.text}",
@@ -177,8 +194,15 @@ class SupabaseRepository:
                     # the key returned by the DB would be ideal, but without a
                     # body we fall back to local parsing so callers still get a
                     # typed record.
+                    logger.info("persistence.create table=%s key=%s -> 2xx (empty body)", self.table_name, key)
                     return self._parse_row(dict(payload))
                 data = response.json()
+                logger.info(
+                    "persistence.create table=%s key=%s -> HTTP %s committed",
+                    self.table_name,
+                    key,
+                    response.status_code,
+                )
                 if isinstance(data, list):
                     if not data:
                         return self._parse_row(dict(payload))
@@ -186,8 +210,15 @@ class SupabaseRepository:
                 return self._parse_row(data)
         except (httpx.HTTPError, RuntimeError) as exc:
             if self._is_missing_table_error(exc):
+                logger.warning(
+                    "persistence.create table=%s key=%s -> unreachable, using in-memory fallback: %s",
+                    self.table_name,
+                    key,
+                    exc,
+                )
                 return self._fallback_create(payload)
             if isinstance(exc, httpx.HTTPError):
+                logger.error("persistence.create table=%s key=%s -> network failure: %s", self.table_name, key, exc)
                 raise DatabaseError("The database could not be reached.", internal=str(exc)) from exc
             raise
 

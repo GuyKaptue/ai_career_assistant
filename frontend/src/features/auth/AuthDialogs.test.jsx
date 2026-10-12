@@ -6,11 +6,13 @@ import AuthDialogs from './AuthDialogs';
 import { I18nProvider } from '../../i18n';
 
 // Supabase is the network boundary: stub it so the tests assert what is sent
-// rather than talking to the real project.
-const { signInWithPassword, signUp, signOut } = vi.hoisted(() => ({
+// rather than talking to the real project. lib/api is stubbed too — it is the
+// backend boundary AuthDialogs now uses to verify the profiles row.
+const { signInWithPassword, signUp, signOut, apiRequest } = vi.hoisted(() => ({
   signInWithPassword: vi.fn(),
   signUp: vi.fn(),
   signOut: vi.fn(),
+  apiRequest: vi.fn(),
 }));
 vi.mock('../../lib/supabase', () => ({
   supabase: {
@@ -23,10 +25,19 @@ vi.mock('../../lib/supabase', () => ({
     },
   },
 }));
+vi.mock('../../lib/api', () => ({
+  apiRequest: apiRequest,
+}));
+
+// Shape returned by supabase-js v2 on success.
+const FAKE_SESSION = { access_token: 'test-token', user: { id: 'user-1', email: 'ada@example.com' } };
 
 beforeEach(() => {
-  signInWithPassword.mockReset().mockResolvedValue({ error: null });
-  signUp.mockReset().mockResolvedValue({ error: null });
+  signInWithPassword.mockReset().mockResolvedValue({ error: null, data: { session: FAKE_SESSION, user: FAKE_SESSION.user } });
+  signUp.mockReset().mockResolvedValue({ error: null, data: { session: FAKE_SESSION, user: FAKE_SESSION.user } });
+  signOut.mockReset().mockResolvedValue({ error: null });
+  // Default: the profiles row already exists (DB trigger created it).
+  apiRequest.mockReset().mockResolvedValue({ user_id: 'user-1', email: 'ada@example.com' });
   document.body.innerHTML = '';
 });
 
@@ -150,7 +161,7 @@ describe('AuthDialogs', () => {
     expect(within(dialog()).getByText('Password must be at least 6 characters.')).toBeInTheDocument();
   });
 
-  it('calls supabase sign-in with the typed credentials', async () => {
+  it('calls supabase sign-in with the typed credentials and verifies the profile row', async () => {
     const supabase = { supabase: { auth: { signInWithPassword, signUp } } };
     renderAuth();
     fireEvent.change(within(dialog()).getByLabelText('Email'), { target: { value: 'ada@example.com' } });
@@ -164,13 +175,19 @@ describe('AuthDialogs', () => {
       }),
     );
     expect(supabase.supabase.auth.signUp).not.toHaveBeenCalled();
+    // The profile row is verified with the session token before success.
+    await waitFor(() => expect(apiRequest).toHaveBeenCalledWith('/api/v1/profiles/user-1', { session: FAKE_SESSION }));
+    expect(signOut).not.toHaveBeenCalled();
   });
 
   it('disables the fields and shows a loading state while pending', async () => {
     const supabase = { supabase: { auth: { signInWithPassword, signUp } } };
     let release;
     supabase.supabase.auth.signInWithPassword.mockImplementation(
-      () => new Promise((resolve) => { release = () => resolve({ error: null }); }),
+      () =>
+        new Promise((resolve) => {
+          release = () => resolve({ error: null, data: { session: FAKE_SESSION, user: FAKE_SESSION.user } });
+        }),
     );
 
     renderAuth();
@@ -219,4 +236,107 @@ describe('AuthDialogs', () => {
     expect(within(dialog()).getByLabelText('Email').value).toBe('');
     expect(within(dialog()).getByLabelText('Password').value).toBe('');
   });
+
+  /**
+   * Regression: "signed up but no user record". Supabase created the auth
+   * user but nothing created the public.profiles row, and the dialog still
+   * reported success. Sign-in/sign-up must verify the row exists (creating
+   * it when missing) before the user is shown as signed in.
+   */
+  it('sign-up creates the profile row when it is missing, then reports success', async () => {
+    // GET 404 (missing) -> POST create -> GET verify.
+    apiRequest
+      .mockRejectedValueOnce(new Error('Profile not found.'))
+      .mockResolvedValueOnce({ user_id: 'user-1', email: 'ada@example.com' })
+      .mockResolvedValueOnce({ user_id: 'user-1', email: 'ada@example.com' });
+
+    const { onSuccess } = renderAuth();
+    fireEvent.click(within(dialog()).getByRole('tab', { name: 'Sign up' }));
+    fireEvent.change(within(dialog()).getByLabelText('Full Name'), { target: { value: 'Ada' } });
+    fireEvent.change(within(dialog()).getByLabelText('Email'), { target: { value: 'ada@example.com' } });
+    fireEvent.change(within(dialog()).getByLabelText('Password'), { target: { value: 'secret123' } });
+    fireEvent.change(within(dialog()).getByLabelText('Confirm Password'), { target: { value: 'secret123' } });
+    fireEvent.click(within(dialog()).getByRole('button', { name: 'Create account' }));
+
+    await waitFor(() => expect(signUp).toHaveBeenCalledWith({
+      email: 'ada@example.com',
+      password: 'secret123',
+      options: { data: { name: 'Ada' } },
+    }));
+    // 1. check, 2. create with the typed name, 3. verify persistence.
+    await waitFor(() => expect(apiRequest).toHaveBeenCalledTimes(3));
+    expect(apiRequest).toHaveBeenNthCalledWith(1, '/api/v1/profiles/user-1', { session: FAKE_SESSION });
+    expect(apiRequest).toHaveBeenNthCalledWith(2, '/api/v1/profiles', {
+      method: 'POST',
+      session: FAKE_SESSION,
+      body: { full_name: 'Ada' },
+    });
+    expect(apiRequest).toHaveBeenNthCalledWith(3, '/api/v1/profiles/user-1', { session: FAKE_SESSION });
+    await waitFor(() => expect(onSuccess).toHaveBeenCalledWith('sign-up'));
+    expect(signOut).not.toHaveBeenCalled();
+    // The panel stays mounted for its exit animation first, hence waitFor.
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+  });
+
+  it('sign-up does not report success when the profile row cannot be verified', async () => {
+    // Every backend call fails: row missing and creation impossible.
+    apiRequest.mockRejectedValue(new Error('The database could not be reached.'));
+
+    const { onSuccess } = renderAuth();
+    fireEvent.click(within(dialog()).getByRole('tab', { name: 'Sign up' }));
+    fireEvent.change(within(dialog()).getByLabelText('Full Name'), { target: { value: 'Ada' } });
+    fireEvent.change(within(dialog()).getByLabelText('Email'), { target: { value: 'ada@example.com' } });
+    fireEvent.change(within(dialog()).getByLabelText('Password'), { target: { value: 'secret123' } });
+    fireEvent.change(within(dialog()).getByLabelText('Confirm Password'), { target: { value: 'secret123' } });
+    fireEvent.click(within(dialog()).getByRole('button', { name: 'Create account' }));
+
+    const alert = await within(dialog()).findByRole('alert');
+    expect(alert).toHaveTextContent('The database could not be reached.');
+    // The half-created session is rolled back and the dialog stays open.
+    expect(signOut).toHaveBeenCalled();
+    expect(onSuccess).not.toHaveBeenCalled();
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+  });
+
+  it('sign-in self-heals a legacy user with no profile row', async () => {
+    // Users registered before the trigger existed have no profiles row:
+    // check misses, create runs without a name (sign-in has none), verify passes.
+    apiRequest
+      .mockRejectedValueOnce(new Error('Profile not found.'))
+      .mockResolvedValueOnce({ user_id: 'user-1', email: 'ada@example.com' })
+      .mockResolvedValueOnce({ user_id: 'user-1', email: 'ada@example.com' });
+
+    const { onSuccess } = renderAuth();
+    fireEvent.change(within(dialog()).getByLabelText('Email'), { target: { value: 'ada@example.com' } });
+    fireEvent.change(within(dialog()).getByLabelText('Password'), { target: { value: 'secret123' } });
+    fireEvent.click(within(dialog()).getByRole('button', { name: 'Sign in' }));
+
+    await waitFor(() => expect(apiRequest).toHaveBeenNthCalledWith(2, '/api/v1/profiles', {
+      method: 'POST',
+      session: FAKE_SESSION,
+      body: { full_name: '' },
+    }));
+    await waitFor(() => expect(onSuccess).toHaveBeenCalledWith('sign-in'));
+    expect(signOut).not.toHaveBeenCalled();
+  });
+
+  it('sign-up without a session defers profile verification to email confirmation', async () => {
+    // Confirmation flow: supabase returns no session, so there is no token
+    // to call the backend with — the message tells the user to confirm.
+    signUp.mockResolvedValue({ error: null, data: { session: null, user: { id: 'user-2' } } });
+
+    const { onSuccess } = renderAuth();
+    fireEvent.click(within(dialog()).getByRole('tab', { name: 'Sign up' }));
+    fireEvent.change(within(dialog()).getByLabelText('Full Name'), { target: { value: 'Ada' } });
+    fireEvent.change(within(dialog()).getByLabelText('Email'), { target: { value: 'ada@example.com' } });
+    fireEvent.change(within(dialog()).getByLabelText('Password'), { target: { value: 'secret123' } });
+    fireEvent.change(within(dialog()).getByLabelText('Confirm Password'), { target: { value: 'secret123' } });
+    fireEvent.click(within(dialog()).getByRole('button', { name: 'Create account' }));
+
+    await waitFor(() => expect(onSuccess).toHaveBeenCalledWith('sign-up'));
+    // No token means no backend round-trip and no rollback.
+    expect(apiRequest).not.toHaveBeenCalled();
+    expect(signOut).not.toHaveBeenCalled();
+  });
 });
+

@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useId, useRef, useState } from 'react';
 
 import { supabase } from '../../lib/supabase';
+import { apiRequest } from '../../lib/api';
+import { debugLog } from '../../lib/debug';
 import { useI18n } from '../../i18n';
 import { useStatus } from '../../hooks/useStatus';
 import { Button } from '../../components/ui/button';
@@ -17,6 +19,46 @@ import {
 
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MIN_PASSWORD = 6;
+
+/**
+ * Verify (and if needed create) the `public.profiles` row for the signed-in
+ * user before the app treats them as authenticated.
+ *
+ * Supabase creates the auth.users row on signUp/signIn, but the profile row
+ * is created by a DB trigger (or by this fallback when the trigger is
+ * missing). A signed-in user without a profile row is the "signed up but no
+ * user record" bug, so this runs before the dialog reports success:
+ *
+ *   1. GET /api/v1/profiles/<id> — row already exists (trigger fired)?
+ *   2. POST /api/v1/profiles — create it (backend derives user_id/email
+ *      from the JWT, so no client-supplied identity is trusted).
+ *   3. GET again — confirm the row really persisted.
+ *
+ * Any failure propagates: the caller signs the session back out rather than
+ * showing the user as signed in without a database record.
+ */
+async function ensureProfileRow(session, fullName) {
+  const userId = session?.user?.id;
+  debugLog('auth', 'verify profile row', { userId });
+  try {
+    await apiRequest(`/api/v1/profiles/${userId}`, { session });
+    debugLog('auth', 'profile row exists', { userId });
+    return;
+  } catch (error) {
+    // 404 (missing row) and transient failures both land here; the POST
+    // below distinguishes them by also failing loudly if the backend is down.
+    debugLog('auth', 'profile row missing or unreadable', { userId, message: error?.message });
+  }
+  await apiRequest('/api/v1/profiles', {
+    method: 'POST',
+    session,
+    body: { full_name: fullName || '' },
+  });
+  debugLog('auth', 'profile row created', { userId });
+  await apiRequest(`/api/v1/profiles/${userId}`, { session });
+  debugLog('auth', 'profile row verified', { userId });
+}
+
 
 /**
  * Shared auth dialog: sign in and sign up live in one dialog as two tabs, so
@@ -114,28 +156,58 @@ export default function AuthDialogs({ open, mode = 'sign-in', onOpenChange, onSu
 
     setSubmitting(true);
     report(t('status.authenticating'));
+    const trimmedEmail = email.trim();
 
     try {
       if (isSignUp) {
-        const { error } = await supabase.auth.signUp({
-          email: email.trim(),
+        debugLog('auth', 'signUp request', { email: trimmedEmail, hasName: Boolean(name.trim()) });
+        const { error, data } = await supabase.auth.signUp({
+          email: trimmedEmail,
           password,
           options: { data: { name: name.trim() } },
         });
-        if (error) throw error;
-        report(t('status.ready'), t('summary.checkEmail'));
-        onSuccess?.('sign-up');
-      } else {
-        const { error } = await supabase.auth.signInWithPassword({
-          email: email.trim(),
-          password,
+        debugLog('auth', 'signUp response', {
+          error: error?.message ?? null,
+          userId: data?.user?.id ?? null,
+          hasSession: Boolean(data?.session),
         });
         if (error) throw error;
+        if (!data?.session) {
+          // Email confirmation required: the auth row (and, via the DB
+          // trigger, the profile row) already exist, but there is no token
+          // to verify with yet — the user confirms by email first.
+          debugLog('auth', 'signUp: email confirmation required, deferring profile verification');
+          report(t('status.ready'), t('summary.checkEmail'));
+          onSuccess?.('sign-up');
+        } else {
+          await ensureProfileRow(data.session, name.trim());
+          report(t('status.ready'), t('summary.signedIn'));
+          onSuccess?.('sign-up');
+        }
+      } else {
+        debugLog('auth', 'signIn request', { email: trimmedEmail });
+        const { error, data } = await supabase.auth.signInWithPassword({
+          email: trimmedEmail,
+          password,
+        });
+        debugLog('auth', 'signIn response', {
+          error: error?.message ?? null,
+          userId: data?.user?.id ?? null,
+          hasSession: Boolean(data?.session),
+        });
+        if (error) throw error;
+        // Self-heal: users registered before the trigger existed have no
+        // profile row — create it now instead of leaving them broken.
+        await ensureProfileRow(data.session, '');
         report(t('status.ready'), t('summary.signedIn'));
         onSuccess?.('sign-in');
       }
       onOpenChange?.(false);
     } catch (error) {
+      debugLog('auth', 'submit failed', { message: error?.message });
+      // Never show a user as signed in without a verified profiles row:
+      // roll back the Supabase session and surface the error instead.
+      await supabase.auth.signOut();
       const message = error?.message || t('summary.unableToAuth');
       setErrors({ form: message });
       report(t('status.authenticationFailed'), message);

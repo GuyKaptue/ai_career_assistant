@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 
 import { supabase } from '../lib/supabase';
+import { debugLog } from '../lib/debug';
 
 export function useSession() {
   const [session, setSession] = useState(null);
@@ -13,6 +14,7 @@ export function useSession() {
       const {
         data: { session: currentSession },
       } = await supabase.auth.getSession();
+      debugLog('auth', 'initial session loaded', { hasSession: Boolean(currentSession) });
       if (isMounted) {
         setSession(currentSession);
         setAuthLoading(false);
@@ -21,7 +23,8 @@ export function useSession() {
 
     loadSession();
 
-    const { data: authListener } = supabase.auth.onAuthStateChange((_event, nextSession) => {
+    const { data: authListener } = supabase.auth.onAuthStateChange((event, nextSession) => {
+      debugLog('auth', 'auth state change', { event, hasSession: Boolean(nextSession) });
       if (isMounted) {
         setSession(nextSession);
         setAuthLoading(false);

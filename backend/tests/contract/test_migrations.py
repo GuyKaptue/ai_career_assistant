@@ -253,6 +253,49 @@ class TestDocumentRetrieval:
         assert drop_position < add_position
 
 
+class TestHandleNewUserTrigger:
+    """Validate the handle_new_user trigger migration.
+
+    PROJECT_GUIDE.md documents an auto-create-profile trigger, but it was
+    never created by any migration: Supabase signups produced auth.users
+    rows with no public.profiles row ("signed up but no user record").
+    This pins the migration that creates it.
+    """
+
+    @pytest.fixture(scope="class")
+    def trigger_migration(self) -> str:
+        for filename, content in _load_migrations():
+            if "handle_new_user" in content:
+                return content
+        pytest.fail("handle_new_user trigger migration not found")
+
+    def test_defines_handle_new_user_function(self, trigger_migration):
+        assert "create or replace function public.handle_new_user()" in trigger_migration
+
+    def test_function_is_security_definer(self, trigger_migration):
+        """Must run as the function owner so signup is not blocked by RLS."""
+        assert "security definer" in trigger_migration
+
+    def test_trigger_fires_after_insert_on_auth_users(self, trigger_migration):
+        assert "create trigger on_auth_user_created" in trigger_migration
+        assert "after insert on auth.users" in trigger_migration
+
+    def test_trigger_inserts_profiles_row_with_user_id(self, trigger_migration):
+        """profiles is keyed by user_id (not id); the guide snippet used id."""
+        assert "insert into public.profiles (user_id, email, full_name)" in trigger_migration
+
+    def test_trigger_is_idempotent(self, trigger_migration):
+        """Re-running must not fail: drop-if-exists + on conflict do nothing."""
+        assert "drop trigger if exists on_auth_user_created" in trigger_migration
+        assert "on conflict (user_id) do nothing" in trigger_migration
+
+    def test_backfills_users_created_before_the_trigger(self, trigger_migration):
+        """Existing auth users without a profile row are repaired inline."""
+        assert "insert into public.profiles (user_id, email, full_name)" in trigger_migration
+        assert "from auth.users" in trigger_migration
+        assert "not exists" in trigger_migration
+
+
 class TestOwnershipIsolation:
     """Validate that RLS policies enforce ownership isolation.
 
