@@ -1,0 +1,45 @@
+// Authentication & authorization subsystem
+digraph authentication_architecture {
+  graph [rankdir=TB, bgcolor="white", fontname="Helvetica", fontsize=14, labelloc="t", label="Authentication & Authorization Subsystem", pad=0.4, nodesep=0.45, ranksep=0.7];
+  node [shape=box, style="rounded,filled", fontname="Helvetica", fontsize=11, margin="0.14,0.09"];
+  edge [fontname="Helvetica", fontsize=9, color="#546E7A", arrowsize=0.8];
+
+  client [label="Client\n(SPA or CLI)", fillcolor="#E3F2FD", color="#1565C0"];
+  supabase_auth [label="Supabase Auth\nissues HS256 JWT\n{sub, email, exp}", fillcolor="#FCE4EC", color="#AD1457"];
+
+  subgraph cluster_backend {
+    label="Backend validation (core/security)";
+    style="rounded,filled"; fillcolor="#FDF7F7"; color="#C62828"; fontname="Helvetica"; fontsize=12;
+    bearer [label="HTTPBearer\n(auto_error=False)\nAuthorization: Bearer <JWT>", fillcolor="#FFEBEE", color="#C62828"];
+    required [label="get_current_user\nrequired auth\n→ 401 on missing/invalid", fillcolor="#FFEBEE", color="#C62828"];
+    optional [label="get_optional_user\nbest-effort auth\n→ None on invalid\n(generation endpoints)", fillcolor="#FFEBEE", color="#C62828"];
+    validate [label="validate_bearer_token\n· signature (HS256)\n· exp check\n· sub must be non-empty str\n· secret ≥ 32 bytes\n  (else 503 ConfigurationError)", fillcolor="#FFEBEE", color="#C62828"];
+    bearer -> validate;
+  }
+
+  identity [label="user identity\nclaims['sub']\n(never from request body)", fillcolor="#E8F5E9", color="#2E7D32"];
+
+  subgraph cluster_enforcement {
+    label="Authorization enforcement (two boundaries)";
+    style="rounded,filled"; fillcolor="#F7FBF7"; color="#2E7D32"; fontname="Helvetica"; fontsize=12;
+    api_layer [label="API layer\nservices filter by user_id\nforeign resource → 404\n(not 403 — no existence leak)", fillcolor="#E8F5E9", color="#2E7D32"];
+    rls [label="Database layer (RLS)\nSupabase policies:\nusing ((select auth.uid()) = user_id)\nusers read own + public rows\nservice-role writes", fillcolor="#E8F5E9", color="#2E7D32"];
+  }
+
+  gdpr [label="GDPR erasure\nDELETE /api/v1/profiles/me\nDELETE /api/v1/documents/{id}\nDELETE /api/v1/applications/{id}", fillcolor="#FFF3E0", color="#E65100"];
+  fail401 [label="401 authentication\n(missing / invalid / expired token)", fillcolor="#FFEBEE", color="#C62828"];
+  fail503 [label="503 configuration\n(secret < 32 bytes / not set)", fillcolor="#FFEBEE", color="#C62828"];
+
+  client -> supabase_auth [label="sign-in"];
+  client -> bearer [label="Bearer JWT"];
+  supabase_auth -> client [label="JWT", style=dashed];
+  bearer -> required;
+  bearer -> optional;
+  required -> identity;
+  optional -> identity [label="when valid"];
+  identity -> api_layer;
+  api_layer -> rls [label="PostgREST\nservice-role"];
+  identity -> gdpr [style=dashed];
+  validate -> fail401 [style=dashed, color="#C62828"];
+  validate -> fail503 [style=dashed, color="#C62828"];
+}

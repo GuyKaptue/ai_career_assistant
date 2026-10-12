@@ -1,0 +1,28 @@
+cff-version: 1.2.0
+message: "If you use this software, please cite it as below."
+authors:
+  - family-names: "Kaptue T."
+    given-names: "Guy M."
+    email: guykaptue24@gmail.com
+title: "AI Career Assistant"
+version: 0.1.0
+date-released: 2026-01-01
+license: MIT
+url: "https://github.com/GuyKaptue/ai-career-assistant"
+repository: "https://github.com/GuyKaptue/ai-career-assistant"
+keywords:
+  - "career"
+  - "cv"
+  - "cover letter"
+  - "ats"
+  - "job search"
+  - "application tracking"
+  - "fastapi"
+  - "react"
+  - "supabase"
+abstract: "Open-source, self-hostable career assistant: CV, cover-letter and
+  resignation generation with template previews, ATS-style resume analysis,
+  semantic job matching, job discovery across multiple providers, and
+  structured application tracking. FastAPI backend, React frontend, Supabase
+  persistence with pgvector, and Hugging Face inference behind a dynamic
+  model router with deterministic offline fallbacks."

@@ -1,0 +1,21 @@
+FROM python:3.13-slim
+
+WORKDIR /app/backend
+
+# Make the `app` package importable no matter how uvicorn is launched. The bare
+# `uvicorn` console script does NOT put the working directory on sys.path (only
+# `python -m uvicorn` does), so without this the container dies with
+# "ModuleNotFoundError: No module named 'app'". PYTHONPATH covers both forms.
+ENV PYTHONPATH=/app/backend
+# Unbuffered stdout/stderr so container logs appear immediately.
+ENV PYTHONUNBUFFERED=1
+
+COPY backend/requirements.txt ./requirements.txt
+RUN pip install --no-cache-dir -r ./requirements.txt
+
+COPY backend ./
+COPY .env.example /app/.env
+
+# `python -m uvicorn` mirrors the Makefile `app` target (PYTHON -m uvicorn …)
+# and adds the CWD to sys.path, matching local development exactly.
+CMD ["python", "-m", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

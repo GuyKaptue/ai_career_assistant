@@ -1,0 +1,64 @@
+// Complete system architecture — AI Career Assistant
+// Layers: user → frontend (React SPA) → backend (FastAPI) → data/external
+digraph system_architecture {
+  graph [rankdir=LR, bgcolor="white", fontname="Helvetica", fontsize=14, labelloc="t", label="AI Career Assistant — Complete System Architecture", pad=0.4, nodesep=0.45, ranksep=0.9];
+  node [shape=box, style="rounded,filled", fontname="Helvetica", fontsize=11, margin="0.14,0.09"];
+  edge [fontname="Helvetica", fontsize=9, color="#546E7A", arrowsize=0.8];
+
+  user [label="User\n(Browser)", fillcolor="#ECEFF1", color="#37474F", shape=box];
+
+  subgraph cluster_frontend {
+    label="Frontend — React 18 + Vite SPA (:5173)";
+    style="rounded,filled"; fillcolor="#F5F9FF"; color="#1565C0"; fontname="Helvetica"; fontsize=12;
+    fe_entry [label="main.jsx\n(React root)", fillcolor="#E3F2FD", color="#1565C0"];
+    fe_app [label="App.jsx\n(feature shell)", fillcolor="#E3F2FD", color="#1565C0"];
+    fe_features [label="features/\nauth · documents · resume-checker\njobs · tracker (Kanban)", fillcolor="#E3F2FD", color="#1565C0"];
+    fe_lib [label="lib/api.js\nREST client\nlib/supabase.js\nauth client", fillcolor="#E3F2FD", color="#1565C0"];
+    fe_hooks [label="hooks/\nuseSession · useAsync\nuseTemplates · useApplications", fillcolor="#E3F2FD", color="#1565C0"];
+    fe_i18n [label="i18n\nen / de / fr", fillcolor="#E3F2FD", color="#1565C0"];
+    fe_entry -> fe_app -> fe_features;
+    fe_features -> fe_hooks -> fe_lib;
+    fe_features -> fe_i18n;
+  }
+
+  subgraph cluster_backend {
+    label="Backend — FastAPI (Python 3.11+, :8000)";
+    style="rounded,filled"; fillcolor="#F7FBF7"; color="#2E7D32"; fontname="Helvetica"; fontsize=12;
+    be_main [label="main.py\nFastAPI composition root\nCORS · middleware", fillcolor="#E8F5E9", color="#2E7D32"];
+    be_api [label="api/routes\nhealth · templates · generation\nresume/check · jobs · profiles\ndocuments · applications · knowledge", fillcolor="#E8F5E9", color="#2E7D32"];
+    be_services [label="application/services\ndocument_generation · document_retrieval\nknowledge_base · semantic_matching\nats_checker · ai_model_router\njobs · tracker · profile · stores", fillcolor="#E8F5E9", color="#2E7D32"];
+    be_domain [label="domain\nmodels · template registry\njob providers · knowledge models", fillcolor="#E8F5E9", color="#2E7D32"];
+    be_infra [label="infrastructure\nAI prompts · embeddings\nknowledge/semantic stores · DOCX export", fillcolor="#E8F5E9", color="#2E7D32"];
+    be_main -> be_api -> be_services;
+    be_services -> be_domain;
+    be_services -> be_infra;
+  }
+
+  subgraph cluster_core {
+    label="Core cross-cutting";
+    style="rounded,filled"; fillcolor="#FDF7F7"; color="#C62828"; fontname="Helvetica"; fontsize=12;
+    core [label="JWT auth (HS256)\nsecurity headers · rate limiting\nstructured logging · metrics\ntyped error model · config\npersistence (Supabase + memory)", fillcolor="#FFEBEE", color="#C62828"];
+  }
+
+  subgraph cluster_data {
+    label="Supabase (managed PostgreSQL)";
+    style="rounded,filled"; fillcolor="#FDF2F8"; color="#AD1457"; fontname="Helvetica"; fontsize=12;
+    db [label="PostgreSQL + pgvector\nprofiles · documents (+versions)\njob_applications\nknowledge_entries · semantic_embeddings\nRLS · PostgREST · Auth", fillcolor="#FCE4EC", color="#AD1457"];
+  }
+
+  subgraph cluster_external {
+    label="External services";
+    style="rounded,filled"; fillcolor="#FFFDF5"; color="#F9A825"; fontname="Helvetica"; fontsize=12;
+    hf [label="Hugging Face\nInference API\nchat models · embeddings", fillcolor="#FFF9C4", color="#F9A825"];
+    jobs [label="Job providers\nRemotive · Arbeitnow · Adzuna", fillcolor="#FFF9C4", color="#F9A825"];
+  }
+
+  user -> fe_entry [label="HTTPS"];
+  fe_lib -> be_main [label="REST /api/v1\nBearer JWT"];
+  fe_lib -> db [label="auth + anon key\n(supabase-js)"];
+  be_services -> db [label="PostgREST\nservice-role key"];
+  be_services -> hf [label="use_ai=true\nHF_TOKEN\n(optional)"];
+  be_services -> jobs [label="job search\nprovider adapters"];
+  be_services -> core [style=dashed, arrowhead=none, color="#C62828"];
+  be_api -> core [style=dashed, arrowhead=none, color="#C62828"];
+}

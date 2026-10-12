@@ -1,0 +1,51 @@
+// Deployment and infrastructure architecture
+digraph deployment_architecture {
+  graph [rankdir=TB, bgcolor="white", fontname="Helvetica", fontsize=14, labelloc="t", label="Deployment & Infrastructure Architecture", pad=0.4, nodesep=0.45, ranksep=0.8];
+  node [shape=box, style="rounded,filled", fontname="Helvetica", fontsize=11, margin="0.14,0.09"];
+  edge [fontname="Helvetica", fontsize=9, color="#546E7A", arrowsize=0.8];
+
+  user [label="User\nBrowser", fillcolor="#ECEFF1", color="#37474F"];
+
+  subgraph cluster_host {
+    label="Host / container runtime (Docker Compose)";
+    style="rounded,filled"; fillcolor="#F5F9FF"; color="#1565C0"; fontname="Helvetica"; fontsize=12;
+    fe [label="frontend container\nDockerfile.frontend\nVite build · static assets\n:5173", fillcolor="#E3F2FD", color="#1565C0"];
+    be [label="backend container\nDockerfile.backend\nuvicorn app.main:app\n:8000", fillcolor="#E8F5E9", color="#2E7D32"];
+    fe -> be [label="VITE_API_URL\nREST + JWT", fontname="Helvetica"];
+  }
+
+  subgraph cluster_supabase {
+    label="Supabase (managed)";
+    style="rounded,filled"; fillcolor="#FDF2F8"; color="#AD1457"; fontname="Helvetica"; fontsize=12;
+    sb_db [label="PostgreSQL + pgvector\n5 migrations · RLS", fillcolor="#FCE4EC", color="#AD1457"];
+    sb_auth [label="Supabase Auth\nJWT issuance (HS256)", fillcolor="#FCE4EC", color="#AD1457"];
+    sb_rest [label="PostgREST\nREST API + RPC", fillcolor="#FCE4EC", color="#AD1457"];
+  }
+
+  subgraph cluster_external {
+    label="External APIs";
+    style="rounded,filled"; fillcolor="#FFFDF5"; color="#F9A825"; fontname="Helvetica"; fontsize=12;
+    hf [label="Hugging Face\nInference API", fillcolor="#FFF9C4", color="#F9A825"];
+    providers [label="Remotive · Arbeitnow\nAdzuna", fillcolor="#FFF9C4", color="#F9A825"];
+  }
+
+  subgraph cluster_ci {
+    label="GitHub Actions CI (.github/workflows/ci.yml)";
+    style="rounded,filled"; fillcolor="#F4F1FB"; color="#6A1B9A"; fontname="Helvetica"; fontsize=12;
+    ci [label="on push / PR\nbackend: format · lint · typecheck\ntests · coverage · bandit · pip-audit\nfrontend: install · build\nsecurity-gates: gitleaks · license\nmigration validation · docker build", fillcolor="#F3E5F5", color="#6A1B9A"];
+  }
+
+  env [label=".env (git-ignored)\nSUPABASE_* · HF_TOKEN\nADZUNA_* · CORS_ORIGINS\nRATE_LIMIT_PER_MINUTE · LOG_LEVEL", fillcolor="#FFF9C4", color="#F9A825"];
+
+  user -> fe [label="HTTPS"];
+  user -> sb_auth [label="sign-in\n(supabase-js)", style=dashed];
+  be -> sb_rest [label="service-role key"];
+  sb_rest -> sb_db;
+  be -> sb_auth [label="JWT validation"];
+  be -> hf [label="HF_TOKEN\n(optional)"];
+  be -> providers [label="job search"];
+  env -> be [style=dashed, arrowhead=none, color="#F9A825"];
+  env -> fe [style=dashed, arrowhead=none, color="#F9A825"];
+  ci -> be [style=dashed, color="#6A1B9A", arrowhead=vee, label="builds & tests"];
+  ci -> fe [style=dashed, color="#6A1B9A", arrowhead=vee];
+}

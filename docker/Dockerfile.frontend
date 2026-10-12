@@ -1,0 +1,16 @@
+FROM node:20-alpine
+
+WORKDIR /app
+
+# Install dependencies first for layer caching. Copy the lockfile alongside
+# package.json so `npm ci` performs a reproducible, lockfile-exact install.
+COPY frontend/package.json frontend/package-lock.json ./frontend/
+RUN cd frontend && npm ci
+
+COPY frontend ./frontend
+
+EXPOSE 5173
+
+# Dev server (HMR). Binds 0.0.0.0 so the host and other containers can reach it.
+CMD ["sh", "-lc", "cd frontend && npm run dev -- --host 0.0.0.0 --port 5173"]
+

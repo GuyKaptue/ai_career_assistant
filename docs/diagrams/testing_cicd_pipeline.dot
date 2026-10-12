@@ -1,0 +1,55 @@
+// Testing and CI/CD pipeline
+digraph testing_cicd_pipeline {
+  graph [rankdir=TB, bgcolor="white", fontname="Helvetica", fontsize=14, labelloc="t", label="Testing & CI/CD Pipeline", pad=0.4, nodesep=0.45, ranksep=0.75];
+  node [shape=box, style="rounded,filled", fontname="Helvetica", fontsize=11, margin="0.14,0.09"];
+  edge [fontname="Helvetica", fontsize=9, color="#546E7A", arrowsize=0.8];
+
+  trigger [label="Trigger\ngit push (main/master)\nor pull request", fillcolor="#ECEFF1", color="#37474F"];
+
+  subgraph cluster_local {
+    label="Local development (Makefile)";
+    style="rounded,filled"; fillcolor="#F5F9FF"; color="#1565C0"; fontname="Helvetica"; fontsize=12;
+    local [label="make format-check · lint · typecheck\nmake test (unit/integration/api/security/contract)\nmake coverage · frontend-build\ncd frontend && npm test (Vitest)", fillcolor="#E3F2FD", color="#1565C0"];
+  }
+
+  subgraph cluster_backend_job {
+    label="CI job: backend (ubuntu-latest, Python 3.13)";
+    style="rounded,filled"; fillcolor="#F7FBF7"; color="#2E7D32"; fontname="Helvetica"; fontsize=12;
+    b1 [label="1 · install\npip install -r backend/requirements.txt", fillcolor="#E8F5E9", color="#2E7D32"];
+    b2 [label="2 · formatting check\nruff format --check", fillcolor="#E8F5E9", color="#2E7D32"];
+    b3 [label="3 · lint\nruff check", fillcolor="#E8F5E9", color="#2E7D32"];
+    b4 [label="4 · type check\nmypy backend/app", fillcolor="#E8F5E9", color="#2E7D32"];
+    b5 [label="5 · tests\npytest backend/tests -q\n(327 passed, 1 skipped)", fillcolor="#E8F5E9", color="#2E7D32"];
+    b6 [label="6 · coverage\npytest --cov=backend/app\n--cov-report=term-missing", fillcolor="#E8F5E9", color="#2E7D32"];
+    b7 [label="7 · security scan\nbandit -r backend/app\npip-audit -r requirements.txt", fillcolor="#E8F5E9", color="#2E7D32"];
+    b1 -> b2 -> b3 -> b4 -> b5 -> b6 -> b7;
+  }
+
+  subgraph cluster_frontend_job {
+    label="CI job: frontend (ubuntu-latest, Node 20)";
+    style="rounded,filled"; fillcolor="#F5F9FF"; color="#1565C0"; fontname="Helvetica"; fontsize=12;
+    f1 [label="1 · install\nnpm install", fillcolor="#E3F2FD", color="#1565C0"];
+    f2 [label="2 · build\nnpm run build (vite)\n+ Vitest test suite (25 tests)", fillcolor="#E3F2FD", color="#1565C0"];
+    f1 -> f2;
+  }
+
+  subgraph cluster_security_job {
+    label="CI job: security-gates";
+    style="rounded,filled"; fillcolor="#FDF7F7"; color="#C62828"; fontname="Helvetica"; fontsize=12;
+    s1 [label="1 · secret scan\ngitleaks (fetch-depth: 0)", fillcolor="#FFEBEE", color="#C62828"];
+    s2 [label="2 · license validation\nlicense-expression\n(permissive only)", fillcolor="#FFEBEE", color="#C62828"];
+    s3 [label="3 · migration validation\nSQL structure + RLS contract tests", fillcolor="#FFEBEE", color="#C62828"];
+    s4 [label="4 · docker build\nbackend + frontend images", fillcolor="#FFEBEE", color="#C62828"];
+    s1 -> s2 -> s3 -> s4;
+  }
+
+  gate [label="Merge gate\nall jobs must pass", fillcolor="#F3E5F5", color="#6A1B9A"];
+
+  trigger -> local [style=dashed, label="pre-push"];
+  trigger -> b1;
+  trigger -> f1;
+  trigger -> s1;
+  b7 -> gate;
+  f2 -> gate;
+  s4 -> gate;
+}

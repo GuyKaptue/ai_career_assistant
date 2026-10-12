@@ -1,0 +1,71 @@
+// Backend architecture — FastAPI layered application
+digraph backend_architecture {
+  graph [rankdir=TB, bgcolor="white", fontname="Helvetica", fontsize=14, labelloc="t", label="Backend Architecture — FastAPI (layered)", pad=0.4, nodesep=0.4, ranksep=0.75];
+  node [shape=box, style="rounded,filled", fontname="Helvetica", fontsize=11, margin="0.14,0.09"];
+  edge [fontname="Helvetica", fontsize=9, color="#546E7A", arrowsize=0.8];
+
+  main [label="main.py — FastAPI composition root\nregister_exception_handlers · middleware stack\n(CORS → request logging → security headers → rate limit)", fillcolor="#E8F5E9", color="#2E7D32"];
+
+  subgraph cluster_api {
+    label="api/ — HTTP layer (routes + Pydantic schemas)";
+    style="rounded,filled"; fillcolor="#F7FBF7"; color="#2E7D32"; fontname="Helvetica"; fontsize=12;
+    r_health [label="health.py\n/health · /api/health · /api/ready", fillcolor="#E8F5E9", color="#2E7D32"];
+    r_templates [label="templates\nGET /api/v1/templates\nPOST /api/v1/templates/preview", fillcolor="#E8F5E9", color="#2E7D32"];
+    r_generation [label="generation (main.py)\nPOST /documents/cv/generate\nPOST /documents/cover-letter/generate\nPOST /documents/resignation/generate\nPOST /resume/check", fillcolor="#E8F5E9", color="#2E7D32"];
+    r_jobs [label="jobs\nGET /api/v1/jobs/search", fillcolor="#E8F5E9", color="#2E7D32"];
+    r_profiles [label="profiles.py\nPOST/GET/PATCH /api/v1/profiles\nDELETE /api/v1/profiles/me", fillcolor="#E8F5E9", color="#2E7D32"];
+    r_docs [label="documents.py\nCRUD · versions · restore\nexport (html/pdf/docx)\nindex · retrieve", fillcolor="#E8F5E9", color="#2E7D32"];
+    r_apps [label="applications.py\nCRUD · PATCH status", fillcolor="#E8F5E9", color="#2E7D32"];
+    r_knowledge [label="knowledge.py\nGET /knowledge/search\nPOST /knowledge/ingest", fillcolor="#E8F5E9", color="#2E7D32"];
+  }
+
+  subgraph cluster_services {
+    label="application/services/ — use-case orchestration";
+    style="rounded,filled"; fillcolor="#FFFBF5"; color="#E65100"; fontname="Helvetica"; fontsize=12;
+    s_gen [label="document_generation.py\ntemplate renderers (CV/letter/resignation)", fillcolor="#FFF3E0", color="#E65100"];
+    s_ret [label="document_retrieval.py\nchunking · indexing · user-scoped RAG (RD-05)", fillcolor="#FFF3E0", color="#E65100"];
+    s_kb [label="knowledge_base.py\nseed corpus · safeguarded retrieval (RD-03)", fillcolor="#FFF3E0", color="#E65100"];
+    s_sem [label="semantic_matching.py\nembedding similarity + ATS hybrid (RD-04)", fillcolor="#FFF3E0", color="#E65100"];
+    s_ats [label="ats_checker.py\nkeyword + formatting + readability scoring", fillcolor="#FFF3E0", color="#E65100"];
+    s_router [label="ai_model_router.py + shared_router.py\ndynamic HF routing · circuit breakers", fillcolor="#FFF3E0", color="#E65100"];
+    s_jobs [label="jobs/service.py\nmulti-provider search · cache · pagination", fillcolor="#FFF3E0", color="#E65100"];
+    s_store [label="document_store.py · application_tracking.py\nprofile_service.py · context_budget.py", fillcolor="#FFF3E0", color="#E65100"];
+  }
+
+  subgraph cluster_domain {
+    label="domain/ — models and business rules";
+    style="rounded,filled"; fillcolor="#FBF7FD"; color="#6A1B9A"; fontname="Helvetica"; fontsize=12;
+    d_models [label="documents · users · applications\njobs · templates · knowledge\nDocumentRecord · TemplateRegistry\nJob model · provider adapters", fillcolor="#F3E5F5", color="#6A1B9A"];
+  }
+
+  subgraph cluster_infra {
+    label="infrastructure/ — providers and external IO";
+    style="rounded,filled"; fillcolor="#F7F9FA"; color="#37474F"; fontname="Helvetica"; fontsize=12;
+    i_prompts [label="ai/prompts/\nversioned CV · cover-letter\nresume-analysis · resignation prompts", fillcolor="#ECEFF1", color="#37474F"];
+    i_knowledge [label="knowledge/\nembeddings (HF + deterministic hash)\nknowledge_store · semantic_store (pgvector)", fillcolor="#ECEFF1", color="#37474F"];
+    i_export [label="document_export/\ncover_letter_docx.py (python-docx)", fillcolor="#ECEFF1", color="#37474F"];
+  }
+
+  subgraph cluster_core {
+    label="core/ — cross-cutting concerns";
+    style="rounded,filled"; fillcolor="#FDF7F7"; color="#C62828"; fontname="Helvetica"; fontsize=12;
+    core [label="config · errors (typed model)\nsecurity (JWT) · middleware\nobservability · metrics · persistence", fillcolor="#FFEBEE", color="#C62828"];
+  }
+
+  supabase [label="Supabase\nPostgREST + pgvector", fillcolor="#FCE4EC", color="#AD1457"];
+  hf [label="Hugging Face\nInference API", fillcolor="#FFF9C4", color="#F9A825"];
+
+  main -> r_health; main -> r_templates; main -> r_generation; main -> r_jobs;
+  main -> r_profiles; main -> r_docs; main -> r_apps; main -> r_knowledge;
+  r_generation -> s_gen; r_generation -> s_ret; r_generation -> s_kb;
+  r_docs -> s_store; r_docs -> s_ret; r_apps -> s_store; r_profiles -> s_store;
+  r_jobs -> s_jobs; r_knowledge -> s_kb;
+  r_generation -> s_ats; r_generation -> s_sem; r_generation -> s_router;
+  s_gen -> d_models; s_jobs -> d_models; s_ats -> d_models;
+  s_kb -> i_knowledge; s_sem -> i_knowledge; s_ret -> i_knowledge;
+  s_router -> i_prompts; s_gen -> i_prompts;
+  r_docs -> i_export;
+  s_store -> core; s_router -> core; r_profiles -> core [style=dashed, arrowhead=none, color="#C62828"];
+  i_knowledge -> supabase [label="service-role"];
+  s_router -> hf [label="HF_TOKEN"];
+}

@@ -1,0 +1,54 @@
+// Module-level architecture — dependency direction and boundaries
+// Rule: api → application → domain; infrastructure → domain; core is shared.
+digraph module_architecture {
+  graph [rankdir=BT, bgcolor="white", fontname="Helvetica", fontsize=14, labelloc="t", label="Module Architecture — dependency direction (top depends on bottom)", pad=0.4, nodesep=0.5, ranksep=0.8];
+  node [shape=box, style="rounded,filled", fontname="Helvetica", fontsize=11, margin="0.16,0.1"];
+  edge [fontname="Helvetica", fontsize=9, color="#546E7A", arrowsize=0.8];
+
+  subgraph cluster_api {
+    label="api (HTTP layer)";
+    style="rounded,filled"; fillcolor="#F7FBF7"; color="#2E7D32"; fontname="Helvetica"; fontsize=12;
+    api_routes [label="api/routes\nhealth · templates · profiles\ndocuments · applications · knowledge", fillcolor="#E8F5E9", color="#2E7D32"];
+    api_schemas [label="api/schemas.py\nrequest/response contracts\nErrorResponse envelope", fillcolor="#E8F5E9", color="#2E7D32"];
+    api_main [label="main.py\ncomposition root + generation endpoints", fillcolor="#E8F5E9", color="#2E7D32"];
+    api_routes -> api_schemas [style=dashed, arrowhead=none];
+  }
+
+  subgraph cluster_app {
+    label="application (use cases)";
+    style="rounded,filled"; fillcolor="#FFFBF5"; color="#E65100"; fontname="Helvetica"; fontsize=12;
+    app_services [label="services\ndocument_generation · document_retrieval\nknowledge_base · semantic_matching\nats_checker · jobs · tracker · profile\nstores · ai router · context_budget", fillcolor="#FFF3E0", color="#E65100"];
+  }
+
+  subgraph cluster_domain {
+    label="domain (business rules — no external deps)";
+    style="rounded,filled"; fillcolor="#FBF7FD"; color="#6A1B9A"; fontname="Helvetica"; fontsize=12;
+    dom [label="domain\nusers · documents · applications\njobs (+ providers) · templates\nknowledge · cover_letters · cv · resume_analysis", fillcolor="#F3E5F5", color="#6A1B9A"];
+  }
+
+  subgraph cluster_infra {
+    label="infrastructure (external IO)";
+    style="rounded,filled"; fillcolor="#F7F9FA"; color="#37474F"; fontname="Helvetica"; fontsize=12;
+    infra [label="infrastructure\nai/prompts · knowledge (embeddings,\nknowledge_store, semantic_store)\ndocument_export (DOCX)", fillcolor="#ECEFF1", color="#37474F"];
+  }
+
+  subgraph cluster_core {
+    label="core (shared cross-cutting)";
+    style="rounded,filled"; fillcolor="#FDF7F7"; color="#C62828"; fontname="Helvetica"; fontsize=12;
+    core [label="core\nconfig · errors · security\nmiddleware · observability\nmetrics · persistence", fillcolor="#FFEBEE", color="#C62828"];
+  }
+
+  cli [label="cli.py\nconfig · db · server\njobs · documents · health", fillcolor="#ECEFF1", color="#37474F"];
+
+  api_main -> api_routes;
+  api_routes -> app_services;
+  api_main -> app_services;
+  app_services -> dom;
+  app_services -> infra;
+  infra -> dom;
+  api_routes -> core [style=dashed, arrowhead=none, color="#C62828"];
+  app_services -> core [style=dashed, arrowhead=none, color="#C62828"];
+  infra -> core [style=dashed, arrowhead=none, color="#C62828"];
+  cli -> core [style=dashed, arrowhead=none, color="#C62828"];
+  cli -> app_services [style=dashed, color="#37474F"];
+}

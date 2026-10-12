@@ -1,0 +1,78 @@
+// Job API integration architecture — AI Career Assistant
+// Verified flow: API route → aggregator → concurrent provider clients →
+// normalization → dedup → date sort → partial-failure handling → response.
+// Sources: backend/app/main.py (route), app/domain/jobs/{service,providers,models}.py,
+// app/infrastructure/job_providers/{http,adzuna,arbeitsagentur,arbeitnow}.py
+digraph job_api_architecture {
+  graph [rankdir=LR, bgcolor="white", fontname="Helvetica", fontsize=14, labelloc="t",
+         label="Job Search Integration — Request, Aggregation and Normalization Pipeline",
+         pad=0.4, nodesep=0.4, ranksep=0.85];
+  node [shape=box, style="rounded,filled", fontname="Helvetica", fontsize=11, margin="0.14,0.09"];
+  edge [fontname="Helvetica", fontsize=9, color="#546E7A", arrowsize=0.8];
+
+  fe [label="Frontend — JobDiscovery.jsx\nquery · location · page/limit\nprovider attribution · partial notice\nsafe external links", fillcolor="#E3F2FD", color="#1565C0"];
+
+  subgraph cluster_api {
+    label="FastAPI · GET /api/v1/jobs/search";
+    style="rounded,filled"; fillcolor="#F7FBF7"; color="#2E7D32"; fontname="Helvetica"; fontsize=12;
+    route [label="search_jobs_route()\nquery 1–200 · page 1–100\nlimit 1–50 · radius 0–200\npublished_since_days 0–100\nwork_time · contract_type\ncandidate_text (RD-04)", fillcolor="#E8F5E9", color="#2E7D32"];
+    invalid [label="AppValidationError\n→ 400 {detail, category}\n(blank query / bad filter)", fillcolor="#FFEBEE", color="#C62828"];
+    unconfigured [label="ConfigurationError\n→ 503 no provider configured\n(fail fast, no mock data)", fillcolor="#FFEBEE", color="#C62828"];
+  }
+
+  subgraph cluster_agg {
+    label="Aggregator — app/domain/jobs/service.py";
+    style="rounded,filled"; fillcolor="#F5F9FF"; color="#1565C0"; fontname="Helvetica"; fontsize=12;
+    cache_lookup [label="cache lookup\nkey = query|location|page|limit\n|providers|filters · TTL 3600 s\n(RLock · deep copy)", fillcolor="#E3F2FD", color="#1565C0"];
+    fanout [label="ThreadPoolExecutor\none thread per provider\naggregate timeout 25 s\nbounded window: 5 pages × 50", fillcolor="#E3F2FD", color="#1565C0"];
+    retry [label="retry policy (per provider)\nMAX_RETRIES = 3 · only transient\nbackoff 0.5 s → 8 s · jitter ±20%\nhonors Retry-After (429)", fillcolor="#E3F2FD", color="#1565C0"];
+    normalize [label="normalize → Job (frozen)\ntitle · company · location · url\ndescription · salary · posted_at\nremote · source · provider_id · tags\nunknown stays None (never invented)", fillcolor="#E3F2FD", color="#1565C0"];
+    dedup [label="deduplicate\ncompany + title + location\n→ canonical URL → source + id\nfills unknown fields from duplicate", fillcolor="#E3F2FD", color="#1565C0"];
+    sort [label="sort newest first\nISO / epoch / DE-format parsing\ninvalid or missing date sorts last", fillcolor="#E3F2FD", color="#1565C0"];
+    outcomes [label="ProviderOutcome\nsucceeded | partial | failed\nerror category only\n(no URLs, no credentials)", fillcolor="#E3F2FD", color="#1565C0"];
+    cache_store [label="cache write\ncomplete outcomes only\n(partial results are retried)", fillcolor="#E3F2FD", color="#1565C0"];
+    rank [label="RD-04 semantic re-rank\n(optional candidate_text)\ncombined semantic + ATS score", fillcolor="#EDE7F6", color="#4527A0"];
+    audit [label="audit block\nproviders attempted/succeeded/failed\ntotal_results · duration_ms\ncached · errors[]", fillcolor="#E3F2FD", color="#1565C0"];
+    allfail [label="JobSearchFailed\n→ 502 external_service\n(only when every provider fails)", fillcolor="#FFEBEE", color="#C62828"];
+    response [label="response\nresults · count · page · limit · total\npartial · truncated\nprovider_status[] · audit", fillcolor="#FFF9C4", color="#F9A825"];
+  }
+subgraph cluster_clients {
+    label="Provider clients — app/infrastructure/job_providers";
+    style="rounded,filled"; fillcolor="#FFFDF5"; color="#F9A825"; fontname="Helvetica"; fontsize=12;
+    adzuna [label="AdzunaProvider\nADZUNA_APP_ID + ADZUNA_APP_KEY\n/de/search · what · where\nresults_per_page · count", fillcolor="#FFF9C4", color="#F9A825"];
+    aa [label="ArbeitsagenturProvider\nX-API-Key: jobboerse-jobsuche\nwas · wo · umkreis · size · page\nveroeffentlichtseit · arbeitszeit\nbefristung · get_details(refnr)", fillcolor="#FFF9C4", color="#F9A825"];
+    an [label="ArbeitnowProvider\npublic feed · ?page=N\nfollows links.next (<= 5 pages)\nlocal query + location filter", fillcolor="#FFF9C4", color="#F9A825"];
+    rem [label="RemotiveProvider\nopt-in · remote feed", fillcolor="#FFF9C4", color="#F9A825"];
+    http [label="http.get_json()\n8 s timeout · httpx INFO log\ndisabled (credentials in query)\n429 / 5xx → retryable typed error", fillcolor="#FFF9C4", color="#F9A825"];
+  }
+
+  subgraph cluster_ext {
+    label="External APIs";
+    style="rounded,filled"; fillcolor="#FDF2F8"; color="#AD1457"; fontname="Helvetica"; fontsize=12;
+    e_adzuna [label="api.adzuna.com\n(quota-limited)", fillcolor="#FCE4EC", color="#AD1457"];
+    e_aa [label="rest.arbeitsagentur.de\njobboerse/jobsuche-service", fillcolor="#FCE4EC", color="#AD1457"];
+    e_an [label="arbeitnow.com\n/api/job-board-api", fillcolor="#FCE4EC", color="#AD1457"];
+    e_rem [label="remotive.com\n/api/remote-jobs", fillcolor="#FCE4EC", color="#AD1457"];
+  }
+
+  fe -> route [label="GET /api/v1/jobs/search\nBearer JWT (optional)"];
+  route -> invalid [label="invalid input"];
+  route -> unconfigured [label="no provider"];
+  route -> cache_lookup [label="search_jobs()"];
+  cache_lookup -> response [label="hit (audit.cached=true)"];
+  cache_lookup -> fanout [label="miss"];
+  fanout -> retry -> adzuna;
+  fanout -> retry -> aa;
+  fanout -> retry -> an;
+  fanout -> retry -> rem [style=dashed];
+  adzuna -> http; aa -> http; an -> http; rem -> http;
+  http -> e_adzuna; http -> e_aa; http -> e_an; http -> e_rem;
+  adzuna -> normalize; aa -> normalize; an -> normalize; rem -> normalize;
+  normalize -> dedup -> sort -> outcomes;
+  outcomes -> allfail [label="all providers failed", color="#C62828", fontcolor="#C62828"];
+  outcomes -> cache_store -> response;
+  outcomes -> audit -> response;
+  response -> rank [label="candidate_text", style=dashed];
+  rank -> response [style=dashed];
+  response -> fe [label="results + provider_status"];
+}

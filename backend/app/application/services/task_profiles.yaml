@@ -1,0 +1,74 @@
+# Per-task routing profiles — DYNAMIC_HF_PROMPT §8.
+#
+# Each of the app's 20 tasks (ai_registry.AI_TASKS) declares the model
+# capabilities it requires. The router eliminates models that declare a
+# capability gap BEFORE ranking (§11 eliminate-then-rank).
+#
+# The five examples given in the spec (cv_generation, cover_letter_generation,
+# resume_analysis, ats_analysis, translation) are reproduced verbatim; the
+# remaining profiles are derived from each task's job-to-be-done. Capabilities
+# must come from the vocabulary in ai_registry.CAPABILITIES — the loader
+# fails fast on anything else.
+#
+# NOTE: profiles describe what a task needs, never measured model quality.
+tasks:
+  cv_generation:
+    description: Full CV generation from structured user facts.
+    required_capabilities: [instruction_following, structured_output, multilingual]
+  cv_rewriting:
+    description: Rewrite an existing CV without changing facts.
+    required_capabilities: [instruction_following, rewriting, structured_output]
+  cv_summarization:
+    description: Condense CV content into shorter summaries.
+    required_capabilities: [instruction_following, summarization, structured_output]
+  cv_section_generation:
+    description: Generate a single CV section (summary, experience, skills).
+    required_capabilities: [instruction_following, structured_output]
+  cover_letter_generation:
+    description: Full cover letter generation.
+    required_capabilities: [instruction_following, multilingual, long_context]
+  cover_letter_rewriting:
+    description: Rewrite an existing cover letter with a new tone or focus.
+    required_capabilities: [instruction_following, rewriting, multilingual]
+  resume_analysis:
+    description: Structured analysis of an uploaded resume.
+    required_capabilities: [long_context, structured_output, reasoning]
+  ats_analysis:
+    description: ATS scoring with structured sub-results.
+    required_capabilities: [structured_output, instruction_following]
+  job_description_analysis:
+    description: Extract roles, requirements and signals from a job posting.
+    required_capabilities: [long_context, reasoning, extraction]
+  keyword_extraction:
+    description: Extract keywords from job descriptions or resumes.
+    required_capabilities: [extraction, structured_output]
+  skill_extraction:
+    description: Extract skills from resumes and job descriptions.
+    required_capabilities: [extraction, structured_output]
+  job_matching:
+    description: Match a candidate profile against a job posting.
+    required_capabilities: [reasoning, structured_output, long_context]
+  career_advice:
+    description: Career guidance grounded in the user's profile.
+    required_capabilities: [reasoning, instruction_following, multilingual]
+  career_gap_analysis:
+    description: Explain and mitigate career gaps.
+    required_capabilities: [reasoning, long_context, structured_output]
+  document_summarization:
+    description: Summarize uploaded documents.
+    required_capabilities: [summarization, instruction_following]
+  document_extraction:
+    description: Extract structured facts from documents.
+    required_capabilities: [extraction, structured_output]
+  translation:
+    description: Translate career documents between supported languages.
+    required_capabilities: [multilingual]
+  proofreading:
+    description: Grammar and style proofreading of documents.
+    required_capabilities: [proofreading, instruction_following]
+  language_correction:
+    description: Correct language errors while preserving meaning.
+    required_capabilities: [proofreading, instruction_following, multilingual]
+  resignation_letter_generation:
+    description: Resignation letter generation from structured inputs.
+    required_capabilities: [instruction_following, structured_output, multilingual]

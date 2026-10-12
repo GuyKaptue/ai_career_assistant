@@ -1,0 +1,57 @@
+// Data flow and processing pipeline — generation request lifecycle
+digraph data_flow_pipeline {
+  graph [rankdir=LR, bgcolor="white", fontname="Helvetica", fontsize=14, labelloc="t", label="Data Flow — document generation pipeline", pad=0.4, nodesep=0.45, ranksep=0.85];
+  node [shape=box, style="rounded,filled", fontname="Helvetica", fontsize=11, margin="0.14,0.09"];
+  edge [fontname="Helvetica", fontsize=9, color="#546E7A", arrowsize=0.8];
+
+  input [label="Client request\nJSON payload\n(name, role, summary,\nexperience, skills, ...)", fillcolor="#E3F2FD", color="#1565C0"];
+
+  subgraph cluster_validate {
+    label="1 · Validation";
+    style="rounded,filled"; fillcolor="#F7FBF7"; color="#2E7D32"; fontname="Helvetica"; fontsize=12;
+    pydantic [label="Pydantic schema\nCVGenerationPayload /\nCoverLetterGenerationPayload /\nResignationPayload\n(extra fields ignored)", fillcolor="#E8F5E9", color="#2E7D32"];
+  }
+
+  subgraph cluster_auth {
+    label="2 · Authentication (optional)";
+    style="rounded,filled"; fillcolor="#FDF7F7"; color="#C62828"; fontname="Helvetica"; fontsize=12;
+    auth [label="get_optional_user\nBearer JWT → sub claim\nanonymous → no personalization", fillcolor="#FFEBEE", color="#C62828"];
+  }
+
+  subgraph cluster_retrieval {
+    label="3 · Retrieval (RAG)";
+    style="rounded,filled"; fillcolor="#FFFBF5"; color="#E65100"; fontname="Helvetica"; fontsize=12;
+    kb [label="knowledge_base\ncareer guidance\n(threshold 0.35, top_k ≤ 10,\n4000-char budget)", fillcolor="#FFF3E0", color="#E65100"];
+    personal [label="document_retrieval\nuser's own documents\n(threshold 0.20, top_k ≤ 10,\n3000-char budget)", fillcolor="#FFF3E0", color="#E65100"];
+  }
+
+  subgraph cluster_process {
+    label="4 · Processing";
+    style="rounded,filled"; fillcolor="#FBF7FD"; color="#6A1B9A"; fontname="Helvetica"; fontsize=12;
+    render [label="template renderer\n19 templates · EN/DE/FR\nuser facts first", fillcolor="#F3E5F5", color="#6A1B9A"];
+    ai [label="optional AI path\nuse_ai=true → HF router\ncircuit breaker · fallback chain\nPydantic contract validation", fillcolor="#F3E5F5", color="#6A1B9A"];
+  }
+
+  subgraph cluster_output {
+    label="5 · Output";
+    style="rounded,filled"; fillcolor="#F7FBF7"; color="#2E7D32"; fontname="Helvetica"; fontsize=12;
+    result [label="CVGenerationResult /\nCoverLetterGenerationResult\ncontent + metadata\nAI review notice", fillcolor="#E8F5E9", color="#2E7D32"];
+    response [label="JSON response\n200 · {detail, category}\non failure", fillcolor="#E8F5E9", color="#2E7D32"];
+  }
+
+  persist [label="Supabase\ndocuments table\n(+ version snapshots)", fillcolor="#FCE4EC", color="#AD1457"];
+  errors [label="typed errors\nValidation · Auth · NotFound\nAIProvider · External · Config\n→ logged server-side, masked", fillcolor="#FFEBEE", color="#C62828"];
+
+  input -> pydantic -> auth -> kb;
+  auth -> personal;
+  kb -> render;
+  personal -> render [label="reference-only\ncontext appended"];
+  render -> ai [label="use_ai=true"];
+  render -> result [label="use_ai=false\n(deterministic default)"];
+  ai -> result [label="validated output\nor template fallback"];
+  result -> response;
+  result -> persist [style=dashed, label="save document"];
+  pydantic -> errors [style=dashed, color="#C62828"];
+  auth -> errors [style=dashed, color="#C62828"];
+  ai -> errors [style=dashed, color="#C62828"];
+}

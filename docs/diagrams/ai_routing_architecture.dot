@@ -1,0 +1,63 @@
+// AI routing subsystem — dynamic HF model routing (AI-01..AI-11)
+digraph ai_routing_architecture {
+  graph [rankdir=TB, bgcolor="white", fontname="Helvetica", fontsize=14, labelloc="t", label="AI Routing Subsystem — Dynamic HF Model Router", pad=0.4, nodesep=0.45, ranksep=0.7];
+  node [shape=box, style="rounded,filled", fontname="Helvetica", fontsize=11, margin="0.14,0.09"];
+  edge [fontname="Helvetica", fontsize=9, color="#546E7A", arrowsize=0.8];
+
+  task [label="Generation task\ncv-generation · cover-letter\nresume-analysis · job-match", fillcolor="#E3F2FD", color="#1565C0"];
+
+  subgraph cluster_registry {
+    label="Model registry (ai_registry.py)";
+    style="rounded,filled"; fillcolor="#F5F9FF"; color="#1565C0"; fontname="Helvetica"; fontsize=12;
+    metadata [label="ModelMetadata\nmodel_id · revision · architecture\ntokenizer · quantization · license\nmultimodal · structured-output\ncontext_window · memory\nlatency · unknown ≠ fabricated", fillcolor="#E3F2FD", color="#1565C0"];
+    policy [label="ModelApprovalPolicy\nAPPROVED / REQUIRES_REVIEW\n/ BLOCKED (license terms)", fillcolor="#E3F2FD", color="#1565C0"];
+    profiles [label="20-task capability model\n+ per-task profiles (YAML)\nrequired capabilities", fillcolor="#E3F2FD", color="#1565C0"];
+  }
+
+  subgraph cluster_discovery {
+    label="Discovery (ai_discovery.py)";
+    style="rounded,filled"; fillcolor="#FFFBF5"; color="#E65100"; fontname="Helvetica"; fontsize=12;
+    hub [label="HF Hub pipeline\ndiscover → compat → license\n→ task → language\n→ resource → rank\n(DiscoveryReport audit)", fillcolor="#FFF3E0", color="#E65100"];
+  }
+
+  subgraph cluster_routing {
+    label="Routing (ai_scoring.py · ai_model_router.py)";
+    style="rounded,filled"; fillcolor="#F7FBF7"; color="#2E7D32"; fontname="Helvetica"; fontsize=12;
+    tokenizer [label="TokenizerService\nrequired_context =\ninput + output + system + margin\npre-check: fits context_window", fillcolor="#E8F5E9", color="#2E7D32"];
+    scoring [label="Weighted Score(m, r)\nconfigurable weights (env)\neliminate-then-rank", fillcolor="#E8F5E9", color="#2E7D32"];
+    fallback [label="fallback_chain()\nper-task dynamic chain\nbounded by AI_MAX_FALLBACK_DEPTH\n(never hard-coded)", fillcolor="#E8F5E9", color="#2E7D32"];
+  }
+
+  subgraph cluster_inference {
+    label="Inference (shared_router.py · ai_model_router.py)";
+    style="rounded,filled"; fillcolor="#FBF7FD"; color="#6A1B9A"; fontname="Helvetica"; fontsize=12;
+    adapter [label="HuggingFaceInferenceAdapter\nInferenceClient chat/text\nbounded retry (RATE/TIMEOUT/SCHEMA)\nexponential backoff", fillcolor="#F3E5F5", color="#6A1B9A"];
+    breaker [label="CircuitBreaker (per model)\nOPEN on UNAVAILABLE\nforce-open · unhealthy marking", fillcolor="#F3E5F5", color="#6A1B9A"];
+    taxonomy [label="Failure taxonomy\nCONTEXT · RATE · QUOTA\nTIMEOUT · OOM\nUNAVAILABLE · SCHEMA\n→ deterministic §14 actions", fillcolor="#F3E5F5", color="#6A1B9A"];
+  }
+
+  subgraph cluster_output {
+    label="Output validation";
+    style="rounded,filled"; fillcolor="#F7FBF7"; color="#2E7D32"; fontname="Helvetica"; fontsize=12;
+    contract [label="Pydantic contracts\nCVGenerationResult\nCoverLetterGenerationResult\nResumeAnalysisResult\nJobMatchResult\n→ 502 on violation", fillcolor="#E8F5E9", color="#2E7D32"];
+    template_fb [label="deterministic template\nfallback (offline default)\n+ AI review notice", fillcolor="#E8F5E9", color="#2E7D32"];
+  }
+
+  obs [label="Observability\nlog_routing_decision()\nselected model · fallback reason\nmetrics (counters/gauges/summaries)\n§27 audit trail", fillcolor="#ECEFF1", color="#37474F"];
+  hf [label="Hugging Face\nInference API", fillcolor="#FFF9C4", color="#F9A825"];
+
+  task -> profiles -> metadata -> policy;
+  task -> hub [label="on demand"];
+  hub -> scoring;
+  metadata -> scoring;
+  policy -> scoring [style=dashed, arrowhead=none];
+  tokenizer -> scoring [style=dashed, arrowhead=none];
+  scoring -> fallback -> adapter;
+  adapter -> breaker;
+  adapter -> taxonomy [style=dashed, color="#6A1B9A"];
+  adapter -> hf [label="HF_TOKEN"];
+  breaker -> contract [label="inference"];
+  contract -> template_fb [label="on failure\n(fail-soft)"];
+  adapter -> obs [style=dashed, arrowhead=none, color="#37474F"];
+  contract -> obs [style=dashed, arrowhead=none, color="#37474F"];
+}

@@ -1,0 +1,41 @@
+# ---- Python ----
+__pycache__/
+*.py[cod]
+*.pyo
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+build/
+dist/
+
+# ---- Node / frontend ----
+node_modules/
+# (frontend build output is dist/ above; Vite also writes .vite/)
+.vite/
+
+# ---- Secrets: NEVER commit ----
+.env
+.env.*
+!.env.example
+frontend/.env
+frontend/.env.*
+!frontend/.env.example
+*.pem
+*.key
+service-account*.json
+supabase/.temp/
+supabase/.env
+
+# ---- OS / editor ----
+.DS_Store
+*.log
+*.tmp
+*.swp
+.idea/
+.vscode/
+

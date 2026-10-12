@@ -1,0 +1,55 @@
+// Database architecture — Supabase PostgreSQL + pgvector
+digraph database_architecture {
+  graph [rankdir=TB, bgcolor="white", fontname="Helvetica", fontsize=14, labelloc="t", label="Database Architecture — Supabase (PostgreSQL + pgvector)", pad=0.4, nodesep=0.5, ranksep=0.7];
+  node [shape=box, style="rounded,filled", fontname="Helvetica", fontsize=11, margin="0.14,0.09"];
+  edge [fontname="Helvetica", fontsize=9, color="#546E7A", arrowsize=0.8];
+
+  subgraph cluster_tables {
+    label="Tables (5 migrations)";
+    style="rounded,filled"; fillcolor="#FDF2F8"; color="#AD1457"; fontname="Helvetica"; fontsize=12;
+    profiles [label="profiles\nid · email (unique)\nfull_name · target_role\nlocation · summary\nFK → auth.users", fillcolor="#FCE4EC", color="#AD1457"];
+    documents [label="documents\nid · user_id · title\ndocument_type (check)\ntemplate_id · content\nversion · version_history\nFK → auth.users (cascade)", fillcolor="#FCE4EC", color="#AD1457"];
+    applications [label="job_applications\nid · user_id · company\nposition · status (check)\njob_url · notes\nfollow_up_date\nFK → auth.users (cascade)", fillcolor="#FCE4EC", color="#AD1457"];
+    knowledge [label="knowledge_entries\nid · domain (check)\ncontent · source\nembedding vector(384)\nmetadata jsonb", fillcolor="#FCE4EC", color="#AD1457"];
+    semantic [label="semantic_embeddings\nid · entity_type (check:\nprofile/cv/cover_letter/\nresume_analysis/job_description)\nentity_id (unique per type)\nembedding vector(384)\nuser_id (nullable = public)\nmetadata jsonb", fillcolor="#FCE4EC", color="#AD1457"];
+  }
+
+  subgraph cluster_indexes {
+    label="Indexes";
+    style="rounded,filled"; fillcolor="#F7F9FA"; color="#37474F"; fontname="Helvetica"; fontsize=12;
+    idx [label="ivfflat (embedding vector_cosine_ops)\non knowledge_entries + semantic_embeddings\nbtree: user_id · entity_type · email · status", fillcolor="#ECEFF1", color="#37474F"];
+  }
+
+  subgraph cluster_rpc {
+    label="Server-side functions (RPC)";
+    style="rounded,filled"; fillcolor="#FFFBF5"; color="#E65100"; fontname="Helvetica"; fontsize=12;
+    rpc_kb [label="knowledge_search\n(query_embedding, match_threshold,\nmatch_count, domain_filter)\n→ similarity = 1 - (embedding <=> q)\nordered by distance, threshold-filtered", fillcolor="#FFF3E0", color="#E65100"];
+    rpc_sem [label="semantic_search\n(query_embedding, match_threshold,\nmatch_count, entity_type_filter,\nuser_filter)\nuser-scoped: own + public rows only", fillcolor="#FFF3E0", color="#E65100"];
+  }
+
+  subgraph cluster_rls {
+    label="Row-Level Security (enabled on all tables)";
+    style="rounded,filled"; fillcolor="#FDF7F7"; color="#C62828"; fontname="Helvetica"; fontsize=12;
+    rls [label="authenticated:\nSELECT own rows (auth.uid() = user_id)\n+ public rows (user_id IS NULL)\nservice_role: full write\nno anon/public access", fillcolor="#FFEBEE", color="#C62828"];
+  }
+
+  access [label="Backend access\nPostgREST with service-role key\n(RLS still enforced for user sessions)", fillcolor="#E8F5E9", color="#2E7D32"];
+
+  profiles -> idx [style=dashed, arrowhead=none];
+  documents -> idx [style=dashed, arrowhead=none];
+  applications -> idx [style=dashed, arrowhead=none];
+  knowledge -> idx [style=dashed, arrowhead=none];
+  semantic -> idx [style=dashed, arrowhead=none];
+  knowledge -> rpc_kb [style=dashed, arrowhead=none];
+  semantic -> rpc_sem [style=dashed, arrowhead=none];
+  access -> profiles [label="CRUD"];
+  access -> documents [label="CRUD + versions"];
+  access -> applications [label="CRUD"];
+  access -> rpc_kb [label="knowledge retrieval"];
+  access -> rpc_sem [label="semantic matching"];
+  rls -> profiles [style=dashed, arrowhead=none, color="#C62828"];
+  rls -> documents [style=dashed, arrowhead=none, color="#C62828"];
+  rls -> applications [style=dashed, arrowhead=none, color="#C62828"];
+  rls -> knowledge [style=dashed, arrowhead=none, color="#C62828"];
+  rls -> semantic [style=dashed, arrowhead=none, color="#C62828"];
+}

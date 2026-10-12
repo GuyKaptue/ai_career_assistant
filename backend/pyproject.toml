@@ -1,0 +1,84 @@
+[project]
+name = "ai-career-assistant"
+version = "0.1.0"
+description = "Open-source career assistant with document generation and job tracking."
+readme = "../../README.md"
+license = "MIT"
+authors = [
+  { name = "Guy M. Kaptue T.", email = "guykaptue24@gmail.com" },
+]
+maintainers = [
+  { name = "Guy M. Kaptue T.", email = "guykaptue24@gmail.com" },
+]
+requires-python = ">=3.11"
+classifiers = [
+  "Development Status :: 4 - Beta",
+  "Intended Audience :: Developers",
+  "Intended Audience :: Education",
+  "Operating System :: OS Independent",
+  "Programming Language :: Python :: 3",
+  "Programming Language :: Python :: 3.11",
+  "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
+  "Topic :: Office/Business",
+  "Topic :: Software Development :: Libraries :: Python Modules",
+]
+dependencies = [
+  "fastapi>=0.142.2",
+  "starlette>=1.3.1",
+  "uvicorn>=0.30.6",
+  "python-dotenv>=1.2.2",
+  "httpx>=0.27.2",
+  "PyJWT>=2.15.0",
+  "python-multipart>=0.0.20",
+  "huggingface_hub>=0.34.3",
+  "pydantic>=2.11.7",
+  "pypdf>=6.19.0",
+  "reportlab>=4.4.4",
+  "python-docx>=1.2.0",
+  # Task routing profiles (ai_profiles.py) — already present transitively,
+  # now declared explicitly per §42 dependency management.
+  "PyYAML>=6.0",
+  # Exact token counting (ai_tokenizer.py); optional at runtime — when the
+  # package or a cached tokenizer.json is missing the service falls back to
+  # its documented conservative estimator (DYNAMIC_HF_PROMPT §10).
+  "tokenizers>=0.20.0",
+]
+
+[project.urls]
+Homepage = "https://github.com/GuyKaptue/ai-career-assistant"
+Documentation = "https://github.com/GuyKaptue/ai-career-assistant/tree/main/docs"
+Issues = "https://github.com/GuyKaptue/ai-career-assistant/issues"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project.scripts]
+ai-career-assistant = "app.cli:main"
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+filterwarnings = [
+  # Third-party deprecations on Python 3.14, none from our code:
+  # - starlette TestClient / _utils use anyio.abc.BlockingPortal alias
+  #   and asyncio.iscoroutinefunction (slated for removal in 3.16)
+  # - fastapi routing still calls asyncio.iscoroutinefunction
+  # Scoped by module so our own future DeprecationWarnings still surface.
+  "ignore::DeprecationWarning:starlette",
+  "ignore::DeprecationWarning:fastapi",
+  "ignore::DeprecationWarning:anyio",
+]
+
+[tool.mypy]
+python_version = "3.13"
+explicit_package_bases = true
+mypy_path = ["backend"]
+ignore_missing_imports = true
+
+[tool.ruff]
+line-length = 120
+src = ["."]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W"]

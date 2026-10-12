@@ -1,0 +1,50 @@
+# Keep the Docker build context small and free of host-only artifacts.
+# (There is a .gitignore, but Docker needs its own because the context is the
+# whole repo, not just tracked files.)
+
+# Version control & CI
+.git
+.github
+
+# Python virtualenv & caches
+.venv
+venv
+**/__pycache__
+**/*.py[cod]
+**/*.pyo
+.pytest_cache
+.mypy_cache
+.ruff_cache
+*.egg-info
+**/build
+
+# Node
+**/node_modules
+**/dist
+frontend/node_modules
+frontend/dist
+.vite
+
+# Secrets — never bake real credentials into an image.
+# Keep the example template: docker/Dockerfile.backend copies it to /app/.env.
+.env
+.env.*
+!.env.example
+frontend/.env*
+!frontend/.env.example
+*.pem
+*.key
+service-account*.json
+supabase/.temp/
+
+# Large local artifacts / docs not needed inside the images
+docs
+supabase
+scripts
+docker
+*.pdf
+*.zip
+.DS_Store
+*.log
+.idea
+.vscode

@@ -1,0 +1,44 @@
+// Frontend architecture — React 18 + Vite SPA
+digraph frontend_architecture {
+  graph [rankdir=TB, bgcolor="white", fontname="Helvetica", fontsize=14, labelloc="t", label="Frontend Architecture — React 18 + Vite", pad=0.4, nodesep=0.4, ranksep=0.7];
+  node [shape=box, style="rounded,filled", fontname="Helvetica", fontsize=11, margin="0.14,0.09"];
+  edge [fontname="Helvetica", fontsize=9, color="#546E7A", arrowsize=0.8];
+
+  entry [label="main.jsx\nReact root + providers\n(I18nProvider · StatusProvider)", fillcolor="#E3F2FD", color="#1565C0"];
+  app [label="App.jsx\nthin shell (~190 lines)\nroutes between features", fillcolor="#E3F2FD", color="#1565C0"];
+
+  subgraph cluster_features {
+    label="features/ — one folder per use case";
+    style="rounded,filled"; fillcolor="#F5F9FF"; color="#1565C0"; fontname="Helvetica"; fontsize=12;
+    f_auth [label="auth/\nAuthPanel\nsign-in · JWT session", fillcolor="#E3F2FD", color="#1565C0"];
+    f_docs [label="documents/\nDocumentStudio · TemplateGallery\ncreate · edit · versions · export · preview", fillcolor="#E3F2FD", color="#1565C0"];
+    f_resume [label="resume-checker/\nResumeChecker\nATS + semantic scoring", fillcolor="#E3F2FD", color="#1565C0"];
+    f_jobs [label="jobs/\nJobDiscovery\nmulti-provider search", fillcolor="#E3F2FD", color="#1565C0"];
+    f_tracker [label="tracker/\nApplicationTracker\nKanban applied→interview→offer→rejected", fillcolor="#E3F2FD", color="#1565C0"];
+  }
+
+  subgraph cluster_shared {
+    label="shared layers";
+    style="rounded,filled"; fillcolor="#F5F9FF"; color="#1565C0"; fontname="Helvetica"; fontsize=12;
+    hooks [label="hooks/\nuseSession · useAsync\nuseStatus · useTemplates\nuseApplications", fillcolor="#BBDEFB", color="#1565C0"];
+    components [label="components/\nAsyncStates (loading/empty/error/retry)\nAuthGuard · StatusBanner (aria-live)", fillcolor="#BBDEFB", color="#1565C0"];
+    lib [label="lib/\napi.js — REST client\nsupabase.js — auth client", fillcolor="#BBDEFB", color="#1565C0"];
+    i18n [label="i18n/\nen · de · fr\nlocalStorage persistence", fillcolor="#BBDEFB", color="#1565C0"];
+    types [label="types.js\nJSDoc API contracts", fillcolor="#BBDEFB", color="#1565C0"];
+  }
+
+  backend [label="FastAPI backend\nREST /api/v1 + Bearer JWT", fillcolor="#E8F5E9", color="#2E7D32"];
+  supabase [label="Supabase\nAuth (sign-in/sign-out)", fillcolor="#FCE4EC", color="#AD1457"];
+  tests [label="Vitest + React Testing Library\njsdom · 25 tests in 6 files", fillcolor="#ECEFF1", color="#37474F"];
+
+  entry -> app;
+  app -> f_auth; app -> f_docs; app -> f_resume; app -> f_jobs; app -> f_tracker;
+  f_auth -> hooks; f_docs -> hooks; f_resume -> hooks; f_jobs -> hooks; f_tracker -> hooks;
+  hooks -> lib;
+  f_docs -> components; f_tracker -> components; f_auth -> components;
+  app -> i18n;
+  lib -> types [style=dashed, arrowhead=none];
+  lib -> backend [label="fetch\nAuthorization: Bearer"];
+  lib -> supabase [label="@supabase/supabase-js"];
+  tests -> app [style=dashed, color="#37474F", arrowhead=vee];
+}

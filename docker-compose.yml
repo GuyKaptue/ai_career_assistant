@@ -1,0 +1,66 @@
+services:
+  backend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.backend
+    environment:
+      APP_NAME: ${APP_NAME:-AI Career Assistant}
+      APP_ENV: ${APP_ENV:-development}
+      APP_DEBUG: ${APP_DEBUG:-false}
+      DEFAULT_TEMPLATE: ${DEFAULT_TEMPLATE:-professional}
+      SUPABASE_URL: ${SUPABASE_URL:-}
+      SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY:-}
+      SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:-}
+      SUPABASE_JWT_SECRET: ${SUPABASE_JWT_SECRET:-}
+      SUPABASE_DB_URL: ${SUPABASE_DB_URL:-}
+      HF_TOKEN: ${HF_TOKEN:-}
+      # Job providers: arbeitsagentur + arbeitnow are free and need no
+      # credentials; adzuna needs a free App ID/Key. Forwarded so the container
+      # behaves exactly like a local dev run instead of falling back to the
+      # .env.example placeholders baked into the image.
+      JOB_PROVIDER: ${JOB_PROVIDER:-arbeitsagentur,arbeitnow}
+      ADZUNA_APP_ID: ${ADZUNA_APP_ID:-}
+      ADZUNA_APP_KEY: ${ADZUNA_APP_KEY:-}
+      JOB_CACHE_TTL_SECONDS: ${JOB_CACHE_TTL_SECONDS:-3600}
+      # CORS (§26) + observability/security (§12, §28). The Vite dev proxy makes
+      # same-origin /api calls so CORS is usually not exercised, but the
+      # allowlist is forwarded for parity with local runs.
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://localhost:4173,http://localhost:3000}
+      RATE_LIMIT_PER_MINUTE: ${RATE_LIMIT_PER_MINUTE:-600}
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    ports:
+      - "8000:8000"
+    # Backend has no hard startup env validation, so a missing credential won't
+    # crash the container — but we still gate the frontend on a ready /health.
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://127.0.0.1:8000/health', timeout=3).status == 200 else 1)"
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/Dockerfile.frontend
+    environment:
+      # Leave VITE_API_URL unset so the browser makes same-origin /api calls and
+      # the Vite dev-server proxy forwards them to the backend container. A fixed
+      # VITE_API_URL would bypass the proxy and reintroduce CORS.
+      # Point the proxy at the compose service name (not 127.0.0.1, which inside
+      # the frontend container is the frontend itself).
+      VITE_DEV_BACKEND: ${VITE_DEV_BACKEND:-http://backend:8000}
+      # Supabase auth runs in the browser; reuse the same project/anon key as the
+      # backend (anon key is public-safe). No VITE_* secrets are baked into the image.
+      VITE_SUPABASE_URL: ${SUPABASE_URL:-}
+      VITE_SUPABASE_ANON_KEY: ${SUPABASE_ANON_KEY:-}
+    ports:
+      - "5173:5173"
+    depends_on:
+      backend:
+        condition: service_healthy
+

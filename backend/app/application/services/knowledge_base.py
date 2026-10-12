@@ -1,0 +1,389 @@
+"""Knowledge base service (RD-03).
+
+Retrieval-augmented career guidance:
+
+- Seeds a vectorized corpus covering CV best practices,
+  cover-letter guidelines, career advice, HR
+  recommendations, and country-specific application
+  rules.
+- Retrieves relevant snippets before AI generation,
+  with source attribution and similarity scores.
+- Applies safeguards: a relevance threshold, a
+  ``top_k`` cap, and a context-character budget so
+  retrieved context stays relevant and bounded.
+- Falls back deterministically: embeddings degrade to
+  feature hashing and storage degrades to in-memory
+  cosine search, so retrieval never hard-fails.
+- Retrieved guidance is reference-only: it is appended
+  to generated documents under an explicit notice and
+  never overrides user-provided facts.
+"""
+
+from __future__ import annotations
+
+import logging
+
+from app.application.services.context_budget import build_bounded_context
+from app.application.services.document_generation import (
+    generate_cover_letter_document,
+    generate_cv_document,
+    generate_resignation_letter_document,
+)
+from app.core.errors import ValidationError
+from app.domain.knowledge.models import (
+    KNOWLEDGE_DOMAINS,
+    KnowledgeEntry,
+)
+from app.infrastructure.knowledge.embeddings import EmbeddingService
+from app.infrastructure.knowledge.knowledge_store import KnowledgeStore
+
+logger = logging.getLogger(__name__)
+
+# Retrieval safeguards (RD-03 acceptance criteria).
+MAX_TOP_K = 10
+DEFAULT_TOP_K = 5
+DEFAULT_MIN_SIMILARITY = 0.35
+MAX_CONTEXT_CHARS = 4000
+
+# Seed corpus. IDs are deterministic so seeding is
+# idempotent across restarts.
+SEED_CORPUS: tuple[tuple[str, str, str, str], ...] = (
+    # (id, domain, content, source)
+    (
+        "seed-cv-001",
+        "cv_best_practices",
+        "Tailor the CV to each job description: mirror the keywords and requirements listed in the posting.",
+        "career-knowledge-base:v1",
+    ),
+    (
+        "seed-cv-002",
+        "cv_best_practices",
+        "Quantify achievements with numbers (percentages, revenue, team size) instead of vague responsibilities.",
+        "career-knowledge-base:v1",
+    ),
+    (
+        "seed-cv-003",
+        "cv_best_practices",
+        "Start bullet points with strong action verbs (led, built, shipped, reduced) rather than duty descriptions.",
+        "career-knowledge-base:v1",
+    ),
+    (
+        "seed-cv-004",
+        "cv_best_practices",
+        "Keep formatting ATS-friendly: standard section headings, no tables or text boxes, common fonts.",
+        "career-knowledge-base:v1",
+    ),
+    (
+        "seed-cv-005",
+        "cv_best_practices",
+        "Limit the CV to one page for under ten years of experience; two pages maximum for senior roles.",
+        "career-knowledge-base:v1",
+    ),
+    (
+        "seed-cl-001",
+        "cover_letter_guidelines",
+        "Open the cover letter with the exact role title and where you found the opening.",
+        "career-knowledge-base:v1",
+    ),
+    (
+        "seed-cl-002",
+        "cover_letter_guidelines",
+        "Match two or three job requirements to concrete examples from your experience in the body paragraphs.",
+        "career-knowledge-base:v1",
+    ),
+    (
+        "seed-cl-003",
+        "cover_letter_guidelines",
+        "Close with a clear call to action: an interview request and availability for follow-up.",
+        "career-knowledge-base:v1",
+    ),
+    (
+        "seed-cl-004",
+        "cover_letter_guidelines",
+        "Address the hiring manager by name whenever the posting does not state 'confidential'.",
+        "career-knowledge-base:v1",
+    ),
+    (
+        "seed-ca-001",
+        "career_advice",
+        "Research the company's recent news, products, and mission before the interview.",
+        "career-knowledge-base:v1",
+    ),
+    (
+        "seed-ca-002",
+        "career_advice",
+        "Prepare STAR stories (Situation, Task, Action, Result) for behavioral interview questions.",
+        "career-knowledge-base:v1",
+    ),
+    (
+        "seed-ca-003",
+        "career_advice",
+        "Network before applying: referrals dramatically increase interview callback rates.",
+        "career-knowledge-base:v1",
+    ),
+    (
+        "seed-ca-004",
+        "career_advice",
+        "Follow up within 24 hours with a short thank-you note referencing a specific discussion point.",
+        "career-knowledge-base:v1",
+    ),
+    (
+        "seed-hr-001",
+        "hr_recommendations",
+        "Recruiters spend only a few seconds on the initial CV scan, so put the most relevant facts first.",
+        "career-knowledge-base:v1",
+    ),
+    (
+        "seed-hr-002",
+        "hr_recommendations",
+        "Explain employment gaps briefly and positively: focus on what you learned or did during the gap.",
+        "career-knowledge-base:v1",
+    ),
+    (
+        "seed-hr-003",
+        "hr_recommendations",
+        "Align your summary with the job posting's language so both ATS and human reviewers see the fit.",
+        "career-knowledge-base:v1",
+    ),
+    (
+        "seed-hr-004",
+        "hr_recommendations",
+        "Never fabricate experience or credentials; verification failures end most hiring processes.",
+        "career-knowledge-base:v1",
+    ),
+    (
+        "seed-cr-de-001",
+        "country_rules",
+        "Germany: follow DIN 5008 for formal letters; CVs traditionally include a "
+        "professional photo (optional since 2024 AGG guidance) and exclude age, "
+        "marital status, and religion.",
+        "din-5008:2024",
+    ),
+    (
+        "seed-cr-de-002",
+        "country_rules",
+        "Germany: applications (Bewerbung) typically include a cover letter "
+        "(Anschreiben), CV (Lebenslauf), and certificates (Zeugnisse).",
+        "din-5008:2024",
+    ),
+    (
+        "seed-cr-fr-001",
+        "country_rules",
+        "France: a professional photo is common on CVs; keep the document to one "
+        "page and include date of birth only if comfortable.",
+        "career-knowledge-base:v1",
+    ),
+    (
+        "seed-cr-fr-002",
+        "country_rules",
+        "France: letters often close with the formal formula 'Je vous prie "
+        "d'agréer, Madame, Monsieur, l'expression de mes salutations distinguées.'",
+        "career-knowledge-base:v1",
+    ),
+    (
+        "seed-cr-us-001",
+        "country_rules",
+        "United States: no photo, no age, no marital status; one page for "
+        "early-career candidates; include a brief summary instead of an objective.",
+        "career-knowledge-base:v1",
+    ),
+    (
+        "seed-cr-us-002",
+        "country_rules",
+        "United States: salary history is prohibited in many states; never include "
+        "it unless explicitly requested where legal.",
+        "career-knowledge-base:v1",
+    ),
+    (
+        "seed-cr-nl-001",
+        "country_rules",
+        "Netherlands: CVs commonly include personal details (date of birth, "
+        "nationality) and a professional photo is optional.",
+        "career-knowledge-base:v1",
+    ),
+    (
+        "seed-cr-nl-002",
+        "country_rules",
+        "Netherlands: cover letters are typically short (three to four paragraphs) " "and direct in tone.",
+        "career-knowledge-base:v1",
+    ),
+)
+
+
+class KnowledgeBaseService:
+    """Vectorized career knowledge base with RAG retrieval."""
+
+    def __init__(
+        self,
+        store: KnowledgeStore | None = None,
+        embeddings: EmbeddingService | None = None,
+    ) -> None:
+        self.store = store or KnowledgeStore()
+        self.embeddings = embeddings or EmbeddingService()
+        if self.store.is_empty():
+            self._seed()
+
+    # -- ingestion ----------------------------------------------------
+
+    def _seed(self) -> None:
+        for entry_id, domain, content, source in SEED_CORPUS:
+            self.ingest(
+                domain=domain,
+                content=content,
+                source=source,
+                metadata={"seeded": True},
+                entry_id=entry_id,
+            )
+
+    def ingest(
+        self,
+        domain: str,
+        content: str,
+        source: str = "community-contribution",
+        metadata: dict | None = None,
+        entry_id: str | None = None,
+    ) -> KnowledgeEntry:
+        """Add one knowledge entry with its embedding."""
+        if domain not in KNOWLEDGE_DOMAINS:
+            raise ValidationError(f"domain must be one of: {', '.join(KNOWLEDGE_DOMAINS)}")
+        if not content.strip():
+            raise ValidationError("content must not be empty.")
+
+        entry = KnowledgeEntry(
+            id=entry_id or self.store.new_id(),
+            domain=domain,
+            content=content.strip(),
+            source=source.strip() or "community-contribution",
+            embedding=self.embeddings.embed_one(content),
+            metadata=metadata or {},
+        )
+        return self.store.add(entry)
+
+    # -- retrieval ------------------------------------------------------
+
+    def search(
+        self,
+        query: str,
+        top_k: int = DEFAULT_TOP_K,
+        domain: str | None = None,
+        min_similarity: float = DEFAULT_MIN_SIMILARITY,
+    ) -> list[dict]:
+        """Retrieve relevant knowledge snippets with attribution.
+
+        Safeguards applied here:
+        - ``top_k`` is capped at ``MAX_TOP_K``
+        - ``min_similarity`` filters irrelevant snippets
+        - every result carries ``source`` and ``similarity``
+        """
+        if not query.strip():
+            raise ValidationError("query must not be empty.")
+        if domain is not None and domain not in KNOWLEDGE_DOMAINS:
+            raise ValidationError(f"domain must be one of: {', '.join(KNOWLEDGE_DOMAINS)}")
+
+        capped_top_k = max(1, min(int(top_k), MAX_TOP_K))
+        query_embedding = self.embeddings.embed_one(query)
+        matches = self.store.search(
+            query_embedding,
+            top_k=capped_top_k,
+            domain=domain,
+            min_similarity=min_similarity,
+        )
+
+        return [
+            {
+                "id": entry.id,
+                "domain": entry.domain,
+                "content": entry.content,
+                "source": entry.source,
+                "similarity": round(similarity, 4),
+                "metadata": entry.metadata,
+            }
+            for entry, similarity in matches
+        ]
+
+    def retrieve_for_generation(
+        self,
+        query: str,
+        top_k: int = DEFAULT_TOP_K,
+        domain: str | None = None,
+        min_similarity: float = DEFAULT_MIN_SIMILARITY,
+    ) -> dict:
+        """Build bounded, source-attributed guidance context.
+
+        Returns ``{context, sources, used_fallback}``. The
+        context is capped at ``MAX_CONTEXT_CHARS`` so
+        retrieved knowledge can never flood a prompt
+        (safeguard against excessive context). If retrieval
+        itself fails, the caller gets an empty context with
+        ``used_fallback=True`` (deterministic fallback).
+        """
+        try:
+            results = self.search(
+                query=query,
+                top_k=top_k,
+                domain=domain,
+                min_similarity=min_similarity,
+            )
+        except Exception as exc:  # noqa: BLE001 — fail-soft
+            logger.warning("knowledge.retrieval.failed: %s", exc)
+            return {"context": "", "sources": [], "used_fallback": True}
+
+        sources = [
+            {
+                "entry_id": item["id"],
+                "source": item["source"],
+                "domain": item["domain"],
+                "similarity": item["similarity"],
+            }
+            for item in results
+        ]
+
+        return {
+            "context": build_bounded_context(
+                results,
+                MAX_CONTEXT_CHARS,
+                attribution=lambda item: (
+                    f"[Source: {item['source']} | {item['domain']} | " f"{item['similarity']:.2f}]"
+                ),
+            ),
+            "sources": sources,
+            "used_fallback": False,
+        }
+
+
+_knowledge_base: KnowledgeBaseService | None = None
+
+
+def get_knowledge_base() -> KnowledgeBaseService:
+    """Lazy singleton: seeding happens on first use, not at
+    import, so importing the app never triggers network
+    calls (tests patch settings before first use)."""
+    global _knowledge_base
+    if _knowledge_base is None:
+        _knowledge_base = KnowledgeBaseService()
+    return _knowledge_base
+
+
+def __getattr__(name: str):
+    # Backwards-compatible lazy access to the singleton.
+    if name == "knowledge_base":
+        return get_knowledge_base()
+    raise AttributeError(name)
+
+
+# Re-exported so callers can generate grounded documents
+# without importing the generation module directly. The
+# generation functions accept ``knowledge_context`` and
+# append it under an explicit reference-only notice.
+__all__ = [
+    "DEFAULT_MIN_SIMILARITY",
+    "DEFAULT_TOP_K",
+    "MAX_CONTEXT_CHARS",
+    "MAX_TOP_K",
+    "KnowledgeBaseService",
+    "SEED_CORPUS",
+    "get_knowledge_base",
+    "generate_cv_document",
+    "generate_cover_letter_document",
+    "generate_resignation_letter_document",
+]
