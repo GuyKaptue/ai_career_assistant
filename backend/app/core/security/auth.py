@@ -14,6 +14,7 @@ Each path only ever uses its own key material (shared secret vs JWKS public
 keys), so header-based routing cannot be abused for algorithm-confusion
 attacks.
 """
+
 from __future__ import annotations
 
 from functools import lru_cache
