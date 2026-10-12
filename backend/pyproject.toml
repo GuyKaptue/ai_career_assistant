@@ -32,7 +32,7 @@ dependencies = [
   "PyJWT>=2.15.0",
   # ES256/RS256 verification of Supabase asymmetric JWTs (security/auth.py).
   "cryptography>=50.0.2",
-  "python-multipart>=0.0.20",
+  "python-multipart>=0.0.31",
   "huggingface_hub>=0.34.3",
   "pydantic>=2.11.7",
   "pypdf>=6.19.0",
