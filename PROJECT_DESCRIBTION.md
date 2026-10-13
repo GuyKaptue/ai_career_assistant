@@ -38,7 +38,7 @@ The project is released under the **MIT License**, has **no billing or subscript
 - **Freelancers and contractors** who regularly update CVs
 - **Universities, NGOs, and outplacement services** that want to offer free career support
 
-Primary launch languages: **English**, with community translations for German, French, Spanish, and Dutch.
+Primary launch languages: **English, German, and French**, with community translations planned for Spanish and Dutch.
 
 ---
 
