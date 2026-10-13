@@ -39,3 +39,5 @@ supabase/.env
 .idea/
 .vscode/
 
+backend/.env
+frontend/.env.local
