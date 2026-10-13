@@ -727,3 +727,41 @@ class TestSettingsRead:
     def test_explicit_arguments_win(self):
         adapter = make_adapter(FakeOllamaServer(), model="phi4:14b")
         assert adapter.model == "phi4:14b"
+
+
+# Owned client timeout verification
+# ---------------------------------------------------------------------------
+class TestOwnedClientTimeouts:
+    """The adapter must create an httpx.Client with all four timeout phases set."""
+
+    def test_owned_client_has_all_four_timeouts(self):
+        """Owned client has explicit connect, read, write, and pool timeouts."""
+        adapter = OllamaInferenceAdapter()
+        assert adapter._owns_client is True
+        timeout = adapter._client._timeout
+        assert timeout.connect is not None and timeout.connect > 0
+        assert timeout.read is not None and timeout.read > 0
+        assert timeout.write is not None and timeout.write > 0
+        assert timeout.pool is not None and timeout.pool > 0
+        adapter.close()
+
+    def test_owned_client_timeouts_match_constructor_args(self):
+        """Timeouts on owned client match the values passed to the adapter."""
+        custom_connect = 1.5
+        custom_read = 45.0
+        adapter = OllamaInferenceAdapter(
+            connect_timeout_seconds=custom_connect,
+            timeout_seconds=custom_read,
+        )
+        timeout = adapter._client._timeout
+        assert timeout.connect == custom_connect
+        assert timeout.read == custom_read
+        # Default constants for write/pool
+        from app.infrastructure.ai.ollama_adapter import (
+            _POOL_TIMEOUT_SECONDS,
+            _WRITE_TIMEOUT_SECONDS,
+        )
+
+        assert timeout.write == _WRITE_TIMEOUT_SECONDS
+        assert timeout.pool == _POOL_TIMEOUT_SECONDS
+        adapter.close()
