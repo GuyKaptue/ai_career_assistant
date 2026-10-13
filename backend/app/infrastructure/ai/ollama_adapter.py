@@ -76,9 +76,31 @@ def _provider_error(message: str, failure_class: str) -> AIProviderError:
     return AIProviderError(f"{failure_class}: {message}")
 
 
+def _build_http_client(
+    connect_timeout: float,
+    read_timeout: float,
+) -> httpx.Client:
+    """Build an httpx.Client with explicit timeouts for all four phases."""
+    # All four timeout components (connect, read, write, pool) are explicitly
+    # configured below; bandit's heuristic misses the nested httpx.Timeout
+    # construction in some versions.
+    return httpx.Client(  # nosec B113
+        timeout=httpx.Timeout(
+            connect=connect_timeout,
+            read=read_timeout,
+            write=_WRITE_TIMEOUT_SECONDS,
+            pool=_POOL_TIMEOUT_SECONDS,
+        ),
+        limits=httpx.Limits(max_connections=16, max_keepalive_connections=8),
+        headers={"Accept": "application/json"},
+    )
+
+
 def _full_jitter(ceiling: float) -> float:
     """Return a delay drawn uniformly from ``[0, ceiling]`` (non-cryptographic use)."""
-    return random.uniform(0.0, ceiling)  # noqa: S311
+    # Retry jitter is a non-security use of randomness; cryptographic strength
+    # is not required and would add unnecessary overhead.
+    return random.uniform(0.0, ceiling)  # noqa: S311  # nosec B311
 
 
 def _normalize_base_url(raw: str) -> str:
@@ -166,15 +188,9 @@ class OllamaInferenceAdapter:
         self._jitter = jitter
 
         self._owns_client = client is None
-        self._client = client or httpx.Client(
-            timeout=httpx.Timeout(
-                connect=self._connect_timeout,
-                read=read_timeout,
-                write=_WRITE_TIMEOUT_SECONDS,
-                pool=_POOL_TIMEOUT_SECONDS,
-            ),
-            limits=httpx.Limits(max_connections=16, max_keepalive_connections=8),
-            headers={"Accept": "application/json"},
+        self._client = client or _build_http_client(
+            connect_timeout=self._connect_timeout,
+            read_timeout=read_timeout,
         )
         self._closed = False
 
