@@ -57,7 +57,7 @@ decision or a documented gap.
 
 | ID | Item | Status |
 |----|------|--------|
-| RD-01 | Ollama / fully-offline inference | Deferred |
+| RD-01 | ~~Ollama / fully-offline inference~~ **Done** — local Ollama channel implemented (see `docs/deployment/ollama.md`) | Done |
 | RD-02 | Mobile PWA + template marketplace | Deferred |
 | RD-03 | RAG career knowledge base (pgvector) | Future roadmap |
 | RD-04 | Semantic job matching with embeddings | Future roadmap |

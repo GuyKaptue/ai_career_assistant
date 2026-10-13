@@ -93,8 +93,19 @@
 
 | ID | Item | Status | Spec ref |
 |----|------|--------|----------|
-| RD-01 | Ollama / fully-offline inference option | ⏸ Deferred | PROJ §12 Phase 4 |
+| RD-01 | Ollama / fully-offline inference option | ✅ Done (2026-10-13) | PROJ §12 Phase 4 |
 | RD-02 | Mobile PWA + template marketplace + university/NGO kit + telemetry/community health | ⏸ Deferred | PROJ §11, §12 Phase 5 |
+
+> **RD-01 completed:** local-first inference chain (Ollama -> Hugging Face -> deterministic template) with a circuit breaker (3 availability failures -> 30 s open -> one probe request), the `ollama` and `ollama-pull` compose services with the pinned `ollama_data` volume, a loopback-only port binding, the informational `ollama` block in `/api/ready`, the four `ollama_*` metrics, the CLI `ollama:` section and `ai test --live` provider reporting, and 1091 backend tests. Operator guide: `docs/deployment/ollama.md`; audit: `docs/audit/ollama-integration.md`.
+>
+> **Ollama follow-ups (RD-06 … RD-09 / open):** these continue the RD sequence because RD-02…RD-05 are already taken by Section 6 (PWA) and Section 7 (RAG work).
+
+| ID | Item | Status | Spec ref |
+|----|------|--------|----------|
+| RD-06 | UI model picker so users can override the automatic model choice | ⬜ Open | docs/deployment/ollama.md |
+| RD-07 | GPU acceleration verified on real NVIDIA hardware | ⬜ Open | docs/deployment/ollama.md#gpu |
+| RD-08 | Per-user quotas and rate limits on generation | ⬜ Open | docs/deployment/ollama.md |
+| RD-09 | Prompt caching for repeated analysis tasks | ⬜ Open | docs/deployment/ollama.md |
 
 ## 7. Future Roadmap — RAG & Semantic AI Architectural Enhancements — DONE
 

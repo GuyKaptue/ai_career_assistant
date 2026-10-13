@@ -1,0 +1,80 @@
+{
+  "json": {
+    "exit_code": 0,
+    "payload": {
+      "mode": "dry-run",
+      "routing": {
+        "components": {
+          "context": 1.0,
+          "health": 1.0,
+          "task": 1.0
+        },
+        "context_window": 163840,
+        "eligible": [
+          "deepseek-ai/DeepSeek-R1",
+          "microsoft/phi-4"
+        ],
+        "eliminated": [
+          {
+            "model_id": "meta-llama/Llama-3.3-70B-Instruct",
+            "reason": "license_requires_review"
+          },
+          {
+            "model_id": "Qwen/Qwen2.5-72B-Instruct",
+            "reason": "license_requires_review"
+          },
+          {
+            "model_id": "mistralai/Mistral-Small-3.1-24B-Instruct-2503",
+            "reason": "not_supported_by_provider"
+          },
+          {
+            "model_id": "google/gemma-3-27b-it",
+            "reason": "license_requires_review"
+          },
+          {
+            "model_id": "HuggingFaceH4/zephyr-7b-beta",
+            "reason": "not_supported_by_provider"
+          },
+          {
+            "model_id": "openchat/openchat_3.5",
+            "reason": "not_supported_by_provider"
+          },
+          {
+            "model_id": "mistralai/Mixtral-8x7B-Instruct-v0.1",
+            "reason": "not_supported_by_provider"
+          },
+          {
+            "model_id": "teknium/OpenHermes-2.5-Mistral-7B",
+            "reason": "not_supported_by_provider"
+          }
+        ],
+        "explanation": [
+          "task career_advice compatible (profile: reasoning, instruction_following, multilingual)",
+          "required context 4096 fits window 163840",
+          "license APPROVED",
+          "health healthy",
+          "quality score unavailable (no empirical benchmark)",
+          "routing score 1.0 higher than 1 alternative(s)"
+        ],
+        "health_status": "healthy",
+        "license_policy_status": "APPROVED",
+        "model_id": "deepseek-ai/DeepSeek-R1",
+        "notes": [],
+        "reason": "highest routing score among eligible candidates",
+        "required_context": 4096,
+        "routing_score": 1.0,
+        "task": "career_advice",
+        "weights": {
+          "context": 0.15,
+          "health": 0.15,
+          "task": 0.25
+        }
+      }
+    },
+    "stdout": "{\n  \"mode\": \"dry-run\",\n  \"routing\": {\n    \"task\": \"career_advice\",\n    \"model_id\": \"deepseek-ai/DeepSeek-R1\",\n    \"reason\": \"highest routing score among eligible candidates\",\n    \"context_window\": 163840,\n    \"health_status\": \"healthy\",\n    \"routing_score\": 1.0,\n    \"components\": {\n      \"task\": 1.0,\n      \"context\": 1.0,\n      \"health\": 1.0\n    },\n    \"weights\": {\n      \"task\": 0.25,\n      \"context\": 0.15,\n      \"health\": 0.15\n    },\n    \"eligible\": [\n      \"deepseek-ai/DeepSeek-R1\",\n      \"microsoft/phi-4\"\n    ],\n    \"eliminated\": [\n      {\n        \"model_id\": \"meta-llama/Llama-3.3-70B-Instruct\",\n        \"reason\": \"license_requires_review\"\n      },\n      {\n        \"model_id\": \"Qwen/Qwen2.5-72B-Instruct\",\n        \"reason\": \"license_requires_review\"\n      },\n      {\n        \"model_id\": \"mistralai/Mistral-Small-3.1-24B-Instruct-2503\",\n        \"reason\": \"not_supported_by_provider\"\n      },\n      {\n        \"model_id\": \"google/gemma-3-27b-it\",\n        \"reason\": \"license_requires_review\"\n      },\n      {\n        \"model_id\": \"HuggingFaceH4/zephyr-7b-beta\",\n        \"reason\": \"not_supported_by_provider\"\n      },\n      {\n        \"model_id\": \"openchat/openchat_3.5\",\n        \"reason\": \"not_supported_by_provider\"\n      },\n      {\n        \"model_id\": \"mistralai/Mixtral-8x7B-Instruct-v0.1\",\n        \"reason\": \"not_supported_by_provider\"\n      },\n      {\n        \"model_id\": \"teknium/OpenHermes-2.5-Mistral-7B\",\n        \"reason\": \"not_supported_by_provider\"\n      }\n    ],\n    \"notes\": [],\n    \"license_policy_status\": \"APPROVED\",\n    \"required_context\": 4096,\n    \"explanation\": [\n      \"task career_advice compatible (profile: reasoning, instruction_following, multilingual)\",\n      \"required context 4096 fits window 163840\",\n      \"license APPROVED\",\n      \"health healthy\",\n      \"quality score unavailable (no empirical benchmark)\",\n      \"routing score 1.0 higher than 1 alternative(s)\"\n    ]\n  }\n}\n"
+  },
+  "text": {
+    "exit_code": 0,
+    "stdout": "Task:      career_advice  (budget 4096 tokens, languages: any)\nSelected:  deepseek-ai/DeepSeek-R1  (score 1.000)\nEligible:  deepseek-ai/DeepSeek-R1, microsoft/phi-4\nEliminated: meta-llama/Llama-3.3-70B-Instruct \u2014 license_requires_review\nEliminated: Qwen/Qwen2.5-72B-Instruct \u2014 license_requires_review\nEliminated: mistralai/Mistral-Small-3.1-24B-Instruct-2503 \u2014 not_supported_by_provider\nEliminated: google/gemma-3-27b-it \u2014 license_requires_review\nEliminated: HuggingFaceH4/zephyr-7b-beta \u2014 not_supported_by_provider\nEliminated: openchat/openchat_3.5 \u2014 not_supported_by_provider\nEliminated: mistralai/Mixtral-8x7B-Instruct-v0.1 \u2014 not_supported_by_provider\nEliminated: teknium/OpenHermes-2.5-Mistral-7B \u2014 not_supported_by_provider\nWhy:       ['task career_advice compatible (profile: reasoning, instruction_following, multilingual)', 'required context 4096 fits window 163840', 'license APPROVED', 'health healthy', 'quality score unavailable (no empirical benchmark)', 'routing score 1.0 higher than 1 alternative(s)']\n\nDry run \u2014 no request was sent. Add --live to call Hugging Face.\n"
+  }
+}

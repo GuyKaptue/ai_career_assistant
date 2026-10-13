@@ -14,12 +14,18 @@ from app.application.services.ai_model_router import HuggingFaceInferenceAdapter
 from app.application.services.ai_registry import ModelApprovalPolicy
 from app.application.services.ai_tokenizer import TokenizerService
 from app.application.services.model_overrides import apply_overrides
+from app.application.services.ollama_first_adapter import (
+    GenerationAdapter,
+    OllamaFirstAdapter,
+    build_generation_adapter,
+)
+from app.application.services.ollama_status_probe import reset_probe_cache
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
 _router: HuggingFaceModelRouter | None = None
-_adapter: HuggingFaceInferenceAdapter | None = None
+_adapter: GenerationAdapter | None = None
 
 
 def get_router() -> HuggingFaceModelRouter:
@@ -30,15 +36,15 @@ def get_router() -> HuggingFaceModelRouter:
     return _router
 
 
-def get_adapter() -> HuggingFaceInferenceAdapter:
-    """Get the shared inference adapter instance."""
+def get_adapter() -> GenerationAdapter:
+    """Get the shared generation adapter (Ollama-first, HF fallback)."""
     global _adapter
     if _adapter is None:
-        _adapter = HuggingFaceInferenceAdapter(router=get_router())
+        _adapter = build_generation_adapter(HuggingFaceInferenceAdapter(router=get_router()))
     return _adapter
 
 
-def set_adapter_for_testing(adapter: HuggingFaceInferenceAdapter | None) -> None:
+def set_adapter_for_testing(adapter: GenerationAdapter | None) -> None:
     """Override the shared adapter for testing purposes."""
     global _adapter
     _adapter = adapter
@@ -51,10 +57,24 @@ def set_router_for_testing(router: HuggingFaceModelRouter | None) -> None:
 
 
 def reset_shared_state() -> None:
-    """Reset shared state for testing."""
+    """Reset shared state for testing (closes the Ollama HTTP client).
+
+    Order matters: the adapter is captured and the module globals are cleared
+    first (so any concurrent caller sees a clean slate and rebuilds from
+    scratch), then the live adapter is closed, and finally the informational
+    status-probe cache is dropped so no stale Ollama state survives.
+    """
     global _router, _adapter
+    adapter = _adapter
     _router = None
     _adapter = None
+    if isinstance(adapter, OllamaFirstAdapter):
+        try:
+            adapter.close()
+        except Exception:  # noqa: BLE001 - a teardown must never mask the caller
+            logger.warning("ai.ollama close failed during reset_shared_state", exc_info=True)
+    # Drop the cached Ollama status (and any probe bound to the old adapter).
+    reset_probe_cache()
 
 
 def _create_router_with_discovery() -> HuggingFaceModelRouter:

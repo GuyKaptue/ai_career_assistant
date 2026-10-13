@@ -41,7 +41,7 @@ infrastructure/ai/
 ## Data Flow
 
 ```
-Backend → Hugging Face Inference API
+Backend → Ollama (local, preferred) → Hugging Face Inference API
   payload: {"inputs": prompt, "parameters": {...}}
   response: generated text (validated against Pydantic schema)
 ```
@@ -49,9 +49,15 @@ Backend → Hugging Face Inference API
 Only the **prompt** (user-supplied career facts) is sent.
 No JWT, user_id, stored documents, or tracker data is sent.
 
+The local-first channel lives in `backend/app/application/services/`; a
+circuit breaker around Ollama fails over to the Hugging Face chain, and a
+pinned non-Ollama `model_id` skips Ollama entirely. Operator guide:
+[`docs/deployment/ollama.md`](../../../docs/deployment/ollama.md).
+
 ## Configuration
 
-- `HF_TOKEN` — Hugging Face API token (required for online mode)
+- `HF_TOKEN` — Hugging Face API token (fallback step of the inference chain)
+- `USE_OLLAMA`, `OLLAMA_MODEL`, `OLLAMA_BASE_URL` — local inference (no credential)
 - `AI_ENABLE_DISCOVERY` — enable model discovery
 - `AI_DISCOVERY_QUERY` — discovery search query
 - `AI_DISCOVERY_LIMIT` — max models to discover

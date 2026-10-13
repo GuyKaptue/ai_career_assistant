@@ -35,8 +35,9 @@ discovering jobs across free public APIs.
 │                       │                                       │
 │         ┌─────────────┴──────────────┐                        │
 │         ▼                            ▼                        │
-│  Supabase (Postgres + Auth)    Hugging Face Inference API    │
-│  (RLS, row-level ownership)    (optional, opt-in)            │
+│  Supabase (Postgres + Auth)    Ollama (local, preferred)      │
+│  (RLS, row-level ownership)    then Hugging Face Inference    │
+│                                (fallback; optional, opt-in)   │
 └─────────────────────────────────────────────────────────────┘
 ```
 
@@ -74,7 +75,8 @@ JWT `sub` claim and never from the request body.
 |----------|---------|
 | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY` | Database + Auth |
 | `SUPABASE_JWT_SECRET` | JWT signing (min 32 bytes for HS256) |
-| `HF_TOKEN` | Hugging Face inference (required for `use_ai=true`) |
+| `HF_TOKEN` | Hugging Face inference (fallback step of the chain) |
+| `USE_OLLAMA`, `OLLAMA_MODEL`, `OLLAMA_BASE_URL` | Local inference (no credential) |
 | `JOB_PROVIDER` | Comma-separated job provider names |
 | `ADZUNA_APP_ID`, `ADZUNA_APP_KEY` | Adzuna credentials |
 | `AI_ENABLE_DISCOVERY` | Enable dynamic model discovery |
@@ -84,7 +86,10 @@ JWT `sub` claim and never from the request body.
 
 - **Self-hosted:** Supabase (self-hosted or managed) + this repo.
 - **Offline:** `HF_TOKEN` unset → deterministic local templates only.
-- **Online:** `use_ai=true` + `HF_TOKEN` set → Hugging Face inference.
+- **Local inference:** `USE_OLLAMA=true` → prompts stay on the instance
+  while Ollama answers (no credential, no billing).
+- **Online:** `use_ai=true` → local Ollama first, then Hugging Face
+  inference on fallback (`HF_TOKEN` set).
 
 ## Related documents
 

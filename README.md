@@ -39,10 +39,11 @@ system keeps working without network access or paid inference credits.
 - **CV, cover-letter, and resignation generation** from structured inputs with
   19 templates (12 CV, 6 cover-letter, 1 resignation), multi-locale support
   (EN/DE/FR), and live template preview
-- **Deterministic template path by default** — generation works fully offline;
-  an optional `use_ai: true` flag routes through Hugging Face inference behind
-  a dynamic model router with typed failure handling, circuit breakers, and
-  bounded fallback chains
+- **Local-first inference** — `make ollama-up` + `make ollama-pull` runs a
+  local [Ollama](docs/deployment/ollama.md) server with no API key and no
+  billing; an optional `use_ai: true` flag routes through it, then Hugging Face
+  inference, behind a dynamic model router with typed failure handling, circuit
+  breakers, and bounded fallback chains
 - **Human-review notice** on every AI-generated document ("AI-generated content —
   review before sending")
 - **Document storage with versioning** — every content change snapshots the
@@ -110,8 +111,9 @@ talks to the backend API (and optionally to Supabase directly for auth).
 1. Browser → React SPA (Vite dev server or static build)
 2. SPA → FastAPI REST API (`/api/v1/...`) with Bearer JWT
 3. FastAPI → Supabase (PostgREST + pgvector) for persistence and vector search
-4. FastAPI → Hugging Face Inference API (only when `use_ai: true` or embeddings
-   are remote; otherwise deterministic local fallbacks)
+4. FastAPI → Ollama (local inference) → Hugging Face Inference API (only when
+   `use_ai: true`, or embeddings are remote; otherwise deterministic local
+   fallbacks) — see [`docs/deployment/ollama.md`](docs/deployment/ollama.md)
 5. FastAPI → job provider APIs (Remotive / Arbeitnow / Adzuna) for job search
 
 ## Installation
@@ -141,6 +143,9 @@ Edit `.env` (never commit it). Required variables:
 | `SUPABASE_JWT_SECRET` | HS256 signing secret, 32+ characters |
 | `SUPABASE_DB_URL` | direct Postgres URL for migrations |
 | `HF_TOKEN` | Hugging Face token (optional; enables remote inference) |
+| `USE_OLLAMA` / `OLLAMA_MODEL` | Local inference switch and model (`true`, `llama3.2:3b`) |
+| `OLLAMA_BASE_URL` | Ollama address (`http://ollama:11434` in Docker) |
+| `OLLAMA_IMAGE_TAG` | Pinned Ollama image tag for compose (`0.40.3`) |
 | `ADZUNA_APP_ID` / `ADZUNA_APP_KEY` | Adzuna provider (optional) |
 
 ### 2. Database

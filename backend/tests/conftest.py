@@ -8,6 +8,7 @@ from app.application.services import application_tracking, profile_service
 from app.application.services import chat_store as chat_store_module
 from app.application.services import document_store as document_store_module
 from app.application.services import project_store as project_store_module
+from app.application.services import shared_router as shared_router_module
 from app.core.config import AppSettings, settings
 from app.core.security import auth
 from app.infrastructure.knowledge import knowledge_store as knowledge_store_module
@@ -41,6 +42,30 @@ def isolate_job_provider_environment(monkeypatch: pytest.MonkeyPatch) -> None:
         "app.infrastructure.job_providers.http.httpx.get",
         reject_live_provider_request,
     )
+
+
+@pytest.fixture(autouse=True)
+def disable_ollama_by_default(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Never touch a real Ollama server in tests unless a test opts in.
+
+    ``build_generation_adapter`` reads ``settings.use_ollama`` at call time, so
+    pointing the adapter module at a copy with the flag off keeps the whole
+    existing suite on the plain HF adapter. Ollama-specific tests re-enable it
+    explicitly and inject a MockTransport client, so no test ever dials
+    localhost:11434.
+    """
+    import dataclasses
+
+    import app.application.services.ollama_first_adapter as ollama_first_module
+
+    monkeypatch.setattr(
+        ollama_first_module,
+        "settings",
+        dataclasses.replace(settings, use_ollama=False),
+    )
+    shared_router_module.reset_shared_state()
+    yield
+    shared_router_module.reset_shared_state()
 
 
 @pytest.fixture(autouse=True)

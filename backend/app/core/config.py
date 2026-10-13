@@ -108,6 +108,17 @@ def parse_id_list(raw: str | None) -> tuple[str, ...]:
     return tuple(item.strip() for item in raw.split(",") if item.strip())
 
 
+def parse_float_setting(raw: str | None, default: float, minimum: float = 0.0) -> float:
+    """Generic float env var with fail-safe fallback (same style as parse_int_setting)."""
+    if raw is None or not raw.strip():
+        return default
+    try:
+        value = float(raw.strip())
+    except ValueError:
+        return default
+    return max(minimum, value)
+
+
 @dataclass(frozen=True)
 class AppSettings:
     app_name: str = "AI Career Assistant"
@@ -133,6 +144,14 @@ class AppSettings:
     ai_discovery_query: str = "instruct"  # search query for HF Hub
     ai_discovery_limit: int = 20  # max models to discover
     ai_max_parameters: int | None = None  # max parameter count for discovered models
+    # --- Ollama local inference (RD-01; no API key, no billing) ---
+    use_ollama: bool = True  # try local Ollama first, then Hugging Face, then template
+    ollama_base_url: str = "http://localhost:11434"  # in Docker: http://ollama:11434
+    ollama_model: str = "llama3.2:3b"  # alternatives: mistral:7b, qwen3:8b
+    ollama_timeout_seconds: float = 120.0  # full generation timeout
+    ollama_connect_timeout_seconds: float = 3.0  # fast fail so HF fallback stays snappy
+    ollama_keep_alive: str = "5m"  # how long Ollama keeps the model loaded
+    ollama_temperature: float = 0.3  # low for factual career documents
 
     @classmethod
     def from_env(cls) -> "AppSettings":
@@ -158,6 +177,16 @@ class AppSettings:
             ai_discovery_query=os.getenv("AI_DISCOVERY_QUERY", "instruct"),
             ai_discovery_limit=parse_int_setting(os.getenv("AI_DISCOVERY_LIMIT"), 20),
             ai_max_parameters=parse_int_setting(os.getenv("AI_MAX_PARAMETERS"), 0) or None,
+            use_ollama=os.getenv("USE_OLLAMA", "true").lower() == "true",
+            ollama_base_url=(os.getenv("OLLAMA_BASE_URL", "http://localhost:11434") or "").strip()
+            or "http://localhost:11434",
+            ollama_model=(os.getenv("OLLAMA_MODEL", "llama3.2:3b") or "").strip() or "llama3.2:3b",
+            ollama_timeout_seconds=parse_float_setting(os.getenv("OLLAMA_TIMEOUT_SECONDS"), 120.0, minimum=1.0),
+            ollama_connect_timeout_seconds=parse_float_setting(
+                os.getenv("OLLAMA_CONNECT_TIMEOUT_SECONDS"), 3.0, minimum=0.5
+            ),
+            ollama_keep_alive=(os.getenv("OLLAMA_KEEP_ALIVE", "5m") or "").strip() or "5m",
+            ollama_temperature=parse_float_setting(os.getenv("OLLAMA_TEMPERATURE"), 0.3),
         )
 
 

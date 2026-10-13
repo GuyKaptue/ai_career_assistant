@@ -8,7 +8,7 @@ PIP_AUDIT ?= $(PYTHON) -m pip_audit
 UVICORN ?= $(PYTHON) -m uvicorn
 SUPABASE ?= supabase
 
-.PHONY: install install-dev format format-check lint lint-fix typecheck test test-unit test-integration test-api test-security test-e2e coverage security licenses validate backend-test frontend-build frontend-dev app dev docker-build docker-up docker-down docker-logs verify check-env db-migrate db-reset db-status clean backend frontend
+.PHONY: install install-dev format format-check lint lint-fix typecheck test test-unit test-integration test-api test-security test-e2e coverage security licenses validate backend-test frontend-build frontend-dev app dev docker-build docker-up docker-down docker-logs ollama-up ollama-pull ollama-logs ollama-gpu-up verify check-env db-migrate db-reset db-status clean backend frontend
 
 check-env:
 	cd backend && PYTHONPATH=. $(PYTHON) -c "from app.core.config import validate_runtime_environment; validate_runtime_environment(); print('Environment configuration looks valid.')"
@@ -109,6 +109,33 @@ docker-down:
 
 docker-logs:
 	docker compose logs -f
+
+# --- Ollama local inference (RD-01) ---
+# The stack runs Ollama as a first-class service: the backend tries it before
+# Hugging Face, and the breaker + template fallback keep the app working when it
+# is down. These three targets never swallow an error.
+
+# Start ollama and wait until it reports healthy. Fails (non-zero) if it does
+# not become healthy, so a broken service is never reported as "up".
+ollama-up:
+	docker compose up -d --wait ollama
+
+# Pull the configured model into the shared volume (one-shot, exit code visible).
+# A failed pull fails this target: `--exit-code-from` returns the one-shot's
+# status, so the pull cannot silently succeed.
+# Inspect the one-shot afterwards with: docker compose ps -a
+ollama-pull:
+	@echo "Pulling $${OLLAMA_MODEL:-llama3.2:3b} into the ollama volume (one-shot; exit code is propagated)."
+	docker compose up --exit-code-from ollama-pull ollama-pull
+	@echo "One-shot finished — see 'docker compose ps -a' for its recorded exit code."
+
+# Follow ollama logs (model pulls, generation, breaker decisions).
+ollama-logs:
+	docker compose logs -f ollama
+
+# Opt-in GPU acceleration (requires the NVIDIA container toolkit on the host).
+ollama-gpu-up:
+	docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d --wait ollama
 
 # Database management (Supabase CLI).
 db-migrate:

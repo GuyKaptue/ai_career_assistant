@@ -17,6 +17,7 @@ from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
 from app.api.schemas import HealthResponse, ReadyResponse
+from app.application.services.ollama_status_probe import get_ollama_status
 from app.core.config import REQUIRED_RUNTIME_ENV_KEYS
 
 logger = logging.getLogger(__name__)
@@ -67,10 +68,15 @@ def readiness() -> JSONResponse:
     config = _config_check()
     database = _database_check()
     ready = bool(config["ok"]) and database["status"] == "ok"
+    # Ollama is strictly informational for readiness: it never gates the
+    # 200/503 decision. The cluster keeps serving when Ollama is down, just as
+    # with any degraded optional channel. See §RD-01.
+    ollama = get_ollama_status()
+    checks = {"config": config, "database": database, "ollama": ollama.as_check()}
     return JSONResponse(
         status_code=200 if ready else 503,
         content={
             "status": "ready" if ready else "not_ready",
-            "checks": {"config": config, "database": database},
+            "checks": checks,
         },
     )

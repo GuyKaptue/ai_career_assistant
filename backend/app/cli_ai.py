@@ -23,6 +23,9 @@ from app.application.services.ai_model_router import (
 )
 from app.application.services.ai_registry import AI_TASKS, ModelApprovalPolicy, ModelMetadata, normalize_task
 from app.application.services.ai_tokenizer import TokenizerService
+from app.application.services.ollama_first_adapter import OLLAMA_MODEL_ID_PREFIX
+from app.application.services.ollama_status_probe import get_ollama_status
+from app.application.services.shared_router import get_adapter
 from app.core.config import settings
 
 DEFAULT_REFRESH_TASKS = ("cv_generation", "cover_letter_generation", "resume_analysis")
@@ -144,6 +147,35 @@ def _model_row(model: ModelMetadata, breaker_state: str | None = None) -> dict[s
     }
 
 
+def _ollama_section() -> str:
+    """Render the Ollama channel section for ``models list`` (RD-01).
+
+    Offline-safe by construction: the probe never dials a server when
+    ``USE_OLLAMA`` is false, and every state is printed as a plain typed line —
+    no traceback, no stack, no base URL or hostname.
+    """
+    status = get_ollama_status()
+    if not status.enabled:
+        return "\nOllama: disabled"
+
+    if not status.reachable:
+        return "\nOllama: unreachable"
+
+    configured = status.model or "unknown"
+    lines = ["\nOllama:", f"  provider=ollama  model={configured}"]
+    if status.model_installed is None:
+        lines.append("  installed=unknown")
+    elif status.model_installed:
+        lines.append("  installed=yes")
+        if status.circuit:
+            lines.append(f"  circuit={status.circuit}")
+    else:
+        lines.append("  installed=no")
+        # Concrete fix, not just the complaint.
+        lines.append(f"  NOT INSTALLED: ollama pull {configured}")
+    return "\n".join(lines)
+
+
 def _models_list(args: argparse.Namespace) -> int:
     router = build_router()
     models = [m for m in router.models if not args.task or m.supports_task(args.task)]
@@ -169,6 +201,7 @@ def _models_list(args: argparse.Namespace) -> int:
         for r in rows
     ]
     _out(_table(table, ["MODEL", "ENABLED", "HEALTH", "CONTEXT", "LICENSE POLICY", "LANGUAGES"]))
+    _out(_ollama_section())
     if cached:
         _out("\nCached by `models refresh` (not routable until `models enable <id>`):")
         _out("\n".join(f"  {r['model_id']}  policy={r['policy']}" for r in cached))
@@ -461,7 +494,7 @@ def _ai_test(args: argparse.Namespace) -> int:
         _err("Note: --live sends the prompt to the Hugging Face Inference API.")
         started = time.monotonic()
         try:
-            answer = router.generate_with_fallback(
+            answer = get_adapter().generate_with_fallback(
                 task,
                 args.prompt,
                 token_budget=args.budget,
@@ -471,14 +504,20 @@ def _ai_test(args: argparse.Namespace) -> int:
                 preferred_model_id=args.model,
             )
         except Exception as exc:  # noqa: BLE001 - provider errors are reported, not raised
+            failure_class = classify_failure(exc)
             result["error"] = f"{type(exc).__name__}: {str(exc)[:300]}"
+            result["failure_class"] = failure_class
+            # Fail closed: report the typed failure class and the exit code the
+            # existing CLI uses for failures — never a traceback.
             _out(json.dumps(result, indent=2) if args.as_json else f"Live call failed: {result['error']}")
+            _err(f"Failure class: {failure_class}")
             return 1
         result["live"] = {
+            "provider": _provider_name(answer.get("model_id")),
             "model_id": answer["model_id"],
-            "fallback_chain": answer.get("fallback_chain"),
             "latency_ms": int((time.monotonic() - started) * 1000),
-            "output_preview": str(answer.get("content", ""))[:300],
+            "fallback_chain": answer.get("fallback_chain"),
+            "fallback_reason": answer.get("fallback_reason"),
         }
     if args.as_json:
         _out(json.dumps(result, indent=2, default=str))
@@ -491,8 +530,16 @@ def _ai_test(args: argparse.Namespace) -> int:
     _out(f"Why:       {decision['explanation']}")
     if args.live:
         live = result["live"]
-        _out(f"\nLive:      {live['model_id']} in {live['latency_ms']} ms  chain={live['fallback_chain']}")
-        _out(f"Output:    {live['output_preview']}")
+        _out(f"\nLive:      provider={live['provider']}  model={live['model_id']}  latency={live['latency_ms']} ms")
+        _out(f"Live:      fallback_chain={','.join(live['fallback_chain']) or 'none'}")
+        _out(f"Live:      fallback_reason={live['fallback_reason'] or 'none'}")
     else:
         _out("\nDry run — no request was sent. Add --live to call Hugging Face.")
     return 0
+
+
+def _provider_name(model_id: str | None) -> str:
+    """Derive the answering provider from the model id: ``ollama:*`` vs HF."""
+    if not model_id:
+        return "huggingface"
+    return "ollama" if model_id.startswith(OLLAMA_MODEL_ID_PREFIX) else "huggingface"

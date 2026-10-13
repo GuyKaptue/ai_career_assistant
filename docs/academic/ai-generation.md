@@ -14,11 +14,13 @@ result carries `ai_generated: false` and `review_before_sending: false`.
 
 ### 1.2 Online (opt-in)
 
-`use_ai: true` and `HF_TOKEN` is set. The backend:
+`use_ai: true` and ( `HF_TOKEN` is set **or** Ollama is reachable). The backend:
 
 1. Builds a prompt from user-supplied facts (no fabrication).
 2. Selects a model via the router (task + context + language + health).
-3. Calls the Hugging Face Inference API.
+3. Tries the local Ollama channel first, then calls the Hugging Face
+   Inference API when Ollama is disabled, unreachable, or its circuit
+   breaker is open.
 4. Validates the response against a Pydantic schema.
 5. On schema violation, falls back to the template path.
 
@@ -68,8 +70,10 @@ dynamically generated per request.
 
 ## 5. Data minimization
 
-Only the **prompt** (user-supplied career facts) is sent to Hugging Face.
-The system never sends:
+The **prompt** (user-supplied career facts) is sent to the local Ollama
+channel when it is enabled and answers; it is sent to Hugging Face only
+when that chain step runs (Ollama disabled, unreachable, or its breaker
+open). The system never sends to either provider:
 
 - The user's JWT or Supabase credentials.
 - The user's `user_id`.

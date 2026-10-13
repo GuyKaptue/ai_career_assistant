@@ -28,6 +28,19 @@ services:
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173,http://localhost:4173,http://localhost:3000}
       RATE_LIMIT_PER_MINUTE: ${RATE_LIMIT_PER_MINUTE:-600}
       LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      # --- Ollama local inference (RD-01) ---
+      # The in-container address is the compose service name, never 127.0.0.1
+      # (which inside the backend container is the backend itself).
+      USE_OLLAMA: ${USE_OLLAMA:-true}
+      OLLAMA_BASE_URL: ${OLLAMA_BASE_URL:-http://ollama:11434}
+      # Shared with the ollama-pull service so the pulled model and the model the
+      # backend tries to serve are the same variable, never two hand-edited names.
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.2:3b}
+      # Defaults mirror backend/app/core/config.py.
+      OLLAMA_TIMEOUT_SECONDS: ${OLLAMA_TIMEOUT_SECONDS:-120}
+      OLLAMA_CONNECT_TIMEOUT_SECONDS: ${OLLAMA_CONNECT_TIMEOUT_SECONDS:-3}
+      OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:-5m}
+      OLLAMA_TEMPERATURE: ${OLLAMA_TEMPERATURE:-0.3}
     ports:
       - "8000:8000"
     # Backend has no hard startup env validation, so a missing credential won't
@@ -42,6 +55,15 @@ services:
       timeout: 5s
       retries: 12
       start_period: 20s
+    # SOFT dependency: service_started, not service_healthy. The backend must
+    # come up while Ollama is still downloading a model — or with Ollama absent
+    # entirely. The router, the circuit breaker and the template fallback all
+    # handle that case, and /api/ready reports Ollama informationally without
+    # gating its own 200/503 decision.
+    depends_on:
+      ollama:
+        condition: service_started
+        required: false
 
   frontend:
     build:
@@ -64,3 +86,52 @@ services:
       backend:
         condition: service_healthy
 
+  # --- Ollama local inference (RD-01) ---
+  # First-class service: the backend tries it before Hugging Face, and the
+  # breaker/fallback chain keeps the app working when it is down.
+  ollama:
+    image: ollama/ollama:${OLLAMA_IMAGE_TAG:-0.40.3}
+    # Loopback only. Ollama has NO authentication and NO TLS: binding it to
+    # 0.0.0.0 would expose an unauthenticated local LLM to anyone who can reach
+    # this host. Other containers reach it over the compose network, not this port.
+    ports:
+      - "127.0.0.1:11434:11434"
+    volumes:
+      # Named volume so pulled models survive `docker compose down`/`up`.
+      - ollama_data:/root/.ollama
+    restart: unless-stopped
+    # The image ships no curl/wget; `ollama list` is the CLI's own self-check.
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    # No secrets, no API keys, no privileged, no host network: this service needs
+    # nothing but a local port and its volume. For NVIDIA GPU acceleration see
+    # docker-compose.gpu.yml (an opt-in override).
+
+  # One-shot that pulls the configured model into the shared volume. It is a
+  # separate service (not an entrypoint hack on `ollama`) so its exit code is
+  # visible and a failed pull fails `make ollama-pull` instead of being swallowed.
+  ollama-pull:
+    image: ollama/ollama:${OLLAMA_IMAGE_TAG:-0.40.3}
+    # Same image, same pin, as the ollama service.
+    environment:
+      # Inside the compose network the reachable address is the service name.
+      OLLAMA_HOST: http://ollama:11434
+      # $$ escapes compose interpolation, so the shell expands it at runtime.
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.2:3b}
+    # The one hard dependency in this file: pulling before ollama answers is
+    # pointless, so wait for it to be healthy.
+    depends_on:
+      ollama:
+        condition: service_healthy
+    # One-shot: never restart, so a failure stays visible in `docker compose ps -a`.
+    restart: "no"
+    # set -eu and the quoted variable mean a failed pull exits non-zero instead
+    # of being reported as success.
+    entrypoint: ["sh", "-c", "set -eu; ollama pull \"$$OLLAMA_MODEL\""]
+
+volumes:
+  ollama_data:

@@ -31,8 +31,9 @@ digraph ai_routing_architecture {
   subgraph cluster_inference {
     label="Inference (shared_router.py · ai_model_router.py)";
     style="rounded,filled"; fillcolor="#FBF7FD"; color="#6A1B9A"; fontname="Helvetica"; fontsize=12;
+    ollama_first [label="OllamaFirstAdapter (ollama_first_adapter.py)\nlocal-first: try Ollama, then HF\na pinned non-Ollama model_id skips Ollama\nCircuitBreaker: 3 availability failures → open 30s\n→ 1 probe request; schema failure does not open", fillcolor="#EDE4F5", color="#4A148C"];
     adapter [label="HuggingFaceInferenceAdapter\nInferenceClient chat/text\nbounded retry (RATE/TIMEOUT/SCHEMA)\nexponential backoff", fillcolor="#F3E5F5", color="#6A1B9A"];
-    breaker [label="CircuitBreaker (per model)\nOPEN on UNAVAILABLE\nforce-open · unhealthy marking", fillcolor="#F3E5F5", color="#6A1B9A"];
+    breaker [label="CircuitBreaker (per channel)\nOllama: OPEN on UNAVAILABLE\nforce-open · unhealthy marking", fillcolor="#F3E5F5", color="#6A1B9A"];
     taxonomy [label="Failure taxonomy\nCONTEXT · RATE · QUOTA\nTIMEOUT · OOM\nUNAVAILABLE · SCHEMA\n→ deterministic §14 actions", fillcolor="#F3E5F5", color="#6A1B9A"];
   }
 
@@ -44,6 +45,7 @@ digraph ai_routing_architecture {
   }
 
   obs [label="Observability\nlog_routing_decision()\nselected model · fallback reason\nmetrics (counters/gauges/summaries)\n§27 audit trail", fillcolor="#ECEFF1", color="#37474F"];
+  ollama_host [label="Ollama (local)\nno key · no billing\noffline capable", fillcolor="#E8F0E8", color="#2E7D32"];
   hf [label="Hugging Face\nInference API", fillcolor="#FFF9C4", color="#F9A825"];
 
   task -> profiles -> metadata -> policy;
@@ -52,12 +54,15 @@ digraph ai_routing_architecture {
   metadata -> scoring;
   policy -> scoring [style=dashed, arrowhead=none];
   tokenizer -> scoring [style=dashed, arrowhead=none];
-  scoring -> fallback -> adapter;
+  scoring -> fallback -> ollama_first [label="1st"];
+  ollama_first -> ollama_host [label="preferred\n(OLLAMA_MODEL)"];
+  ollama_first -> adapter [label="fallback\n(unavailable · breaker open)"];
   adapter -> breaker;
   adapter -> taxonomy [style=dashed, color="#6A1B9A"];
   adapter -> hf [label="HF_TOKEN"];
   breaker -> contract [label="inference"];
   contract -> template_fb [label="on failure\n(fail-soft)"];
+  ollama_first -> obs [style=dashed, arrowhead=none, color="#37474F"];
   adapter -> obs [style=dashed, arrowhead=none, color="#37474F"];
   contract -> obs [style=dashed, arrowhead=none, color="#37474F"];
 }

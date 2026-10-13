@@ -1,0 +1,29 @@
+# GPU acceleration for the Ollama service — an OPT-IN override, not the default.
+#
+# Apply it on top of docker-compose.yml:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.gpu.yml up -d
+#   make ollama-gpu-up            # convenience target in the Makefile
+#
+# Why an override file instead of a commented-out `deploy:` block:
+#   * it is real, validatable YAML — `docker compose config` verifies it;
+#   * docker-compose.yml stays free of dead code;
+#   * opting in is explicit at the command line rather than an edit away.
+#
+# Requires the NVIDIA container toolkit on the host:
+#   https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/latest/install-guide.html
+# Verify with `docker run --rm --gpus all ollama/ollama nvidia-smi`.
+# CPU inference is fully supported without this file.
+
+services:
+  ollama:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              # "all" GPUs; pin to a count or specific UUIDs to limit it:
+              #   count: 1
+              #   device_ids: ["GPU-xxxxxxxx"]
+              count: all
+              capabilities: [gpu]

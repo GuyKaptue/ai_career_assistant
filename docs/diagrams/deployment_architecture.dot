@@ -11,7 +11,11 @@ digraph deployment_architecture {
     style="rounded,filled"; fillcolor="#F5F9FF"; color="#1565C0"; fontname="Helvetica"; fontsize=12;
     fe [label="frontend container\nDockerfile.frontend\nVite build · static assets\n:5173", fillcolor="#E3F2FD", color="#1565C0"];
     be [label="backend container\nDockerfile.backend\nuvicorn app.main:app\n:8000", fillcolor="#E8F5E9", color="#2E7D32"];
+    ol [label="ollama container\nollama/ollama:0.40.3\nmodel held in ollama_data\nvolume\n127.0.0.1:11434 only\n(no auth — loopback)", fillcolor="#EDE4F5", color="#4A148C"];
+    pull [label="ollama-pull (one-shot)\n`ollama pull $OLLAMA_MODEL`\nrestart: \"no\" — exit code visible\ndepends_on: ollama healthy", fillcolor="#F3E5F5", color="#6A1B9A"];
     fe -> be [label="VITE_API_URL\nREST + JWT", fontname="Helvetica"];
+    be -> ol [label="http://ollama:11434\n(preferred; informational\nin /api/ready)"];
+    pull -> ol [label="one-shot at deploy"];
   }
 
   subgraph cluster_supabase {
@@ -35,14 +39,14 @@ digraph deployment_architecture {
     ci [label="on push / PR\nbackend: format · lint · typecheck\ntests · coverage · bandit · pip-audit\nfrontend: install · build\nsecurity-gates: gitleaks · license\nmigration validation · docker build", fillcolor="#F3E5F5", color="#6A1B9A"];
   }
 
-  env [label=".env (git-ignored)\nSUPABASE_* · HF_TOKEN\nADZUNA_* · CORS_ORIGINS\nRATE_LIMIT_PER_MINUTE · LOG_LEVEL", fillcolor="#FFF9C4", color="#F9A825"];
+  env [label=".env (git-ignored)\nSUPABASE_* · HF_TOKEN\nADZUNA_* · CORS_ORIGINS\nRATE_LIMIT_PER_MINUTE · LOG_LEVEL\nUSE_OLLAMA · OLLAMA_* · OLLAMA_IMAGE_TAG", fillcolor="#FFF9C4", color="#F9A825"];
 
   user -> fe [label="HTTPS"];
   user -> sb_auth [label="sign-in\n(supabase-js)", style=dashed];
   be -> sb_rest [label="service-role key"];
   sb_rest -> sb_db;
   be -> sb_auth [label="JWT validation"];
-  be -> hf [label="HF_TOKEN\n(optional)"];
+  be -> hf [label="HF_TOKEN\n(optional; fallback\nonly)", style=dashed];
   be -> providers [label="job search"];
   env -> be [style=dashed, arrowhead=none, color="#F9A825"];
   env -> fe [style=dashed, arrowhead=none, color="#F9A825"];

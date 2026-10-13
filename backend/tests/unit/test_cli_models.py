@@ -224,8 +224,34 @@ class TestAiTest:
         )
         code, out, err = run(["ai", "test", "--task", "career_advice", "--live", "--json"], capsys)
         assert code == 0 and "sends the prompt" in err
-        live = json.loads(out)["live"]
-        assert live["output_preview"] == "A concise tip." and live["model_id"]
+        payload = json.loads(out)
+        live = payload["live"]
+        # The answering model is reported…
+        assert live["model_id"]
+        # …and the provider is derived from it: an HF id means "huggingface".
+        assert live["provider"] == "huggingface"
+        assert live["latency_ms"] >= 0
+        assert "fallback_chain" in live and "fallback_reason" in live
+        # Privacy contract (RD-01): the generated content and the prompt must
+        # never reach the CLI payload, in any field.
+        blob = json.dumps(payload)
+        assert "output_preview" not in blob
+        assert "A concise tip." not in blob
+        assert "career coach" not in blob.lower()
+
+    def test_live_reports_the_typed_failure_class(self, with_token, monkeypatch, capsys):
+        def fail(self, model, prompt, max_new_tokens):
+            raise RuntimeError("503 Service Unavailable")
+
+        monkeypatch.setattr(HuggingFaceInferenceAdapter, "_call_model", fail)
+        code, out, err = run(["ai", "test", "--live", "--json"], capsys)
+        payload = json.loads(out)
+        assert code == 1
+        assert "AIProviderError" in payload["error"]
+        # The typed failure class is reported alongside the raw error, and the
+        # exit code matches the CLI's existing failure convention.
+        assert payload["failure_class"]
+        assert "Failure class:" in err
 
     def test_live_failure_is_reported_not_raised(self, with_token, monkeypatch, capsys):
         def fail(self, model, prompt, max_new_tokens):

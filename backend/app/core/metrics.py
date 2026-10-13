@@ -76,3 +76,19 @@ class MetricsRegistry:
 
 # Process-wide registry used by the AI router (§28 metric names).
 METRICS = MetricsRegistry()
+
+
+def record_ollama_skip() -> None:
+    """Count a request that skipped Ollama because its circuit breaker is open."""
+    METRICS.inc("ollama_fallback_total")
+
+
+def record_ollama_outcome(*, success: bool, fallback_to_hf: bool = False) -> None:
+    """Count one Ollama attempt (RD-01). Never logs prompt/response content."""
+    METRICS.inc("ollama_requests_total")
+    if success:
+        METRICS.inc("ollama_success_total")
+    else:
+        METRICS.inc("ollama_failed_total")
+    if fallback_to_hf:
+        METRICS.inc("ollama_fallback_total")
