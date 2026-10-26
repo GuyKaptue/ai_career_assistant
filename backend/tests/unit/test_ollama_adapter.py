@@ -95,6 +95,34 @@ class TestChatSuccess:
         headers = dict(server.chat_requests[0].headers)
         assert "authorization" not in {key.lower() for key in headers}
 
+    def test_auth_header_injected_when_both_values_are_set(self):
+        server = FakeOllamaServer()
+        adapter = make_adapter(server, auth_header="X-Ollama-Token", auth_token="secret-token")
+
+        adapter.chat([{"role": "user", "content": "hello"}])
+
+        headers = {key.lower(): value for key, value in server.chat_requests[0].headers.items()}
+        assert headers["x-ollama-token"] == "secret-token"
+
+    def test_auth_header_not_injected_when_only_header_is_set(self):
+        server = FakeOllamaServer()
+        adapter = make_adapter(server, auth_header="X-Ollama-Token", auth_token=None)
+
+        adapter.chat([{"role": "user", "content": "hello"}])
+
+        headers = {key.lower() for key in server.chat_requests[0].headers}
+        assert "x-ollama-token" not in headers
+
+    def test_auth_header_not_injected_when_only_token_is_set(self):
+        server = FakeOllamaServer()
+        adapter = make_adapter(server, auth_header=None, auth_token="secret-token")
+
+        adapter.chat([{"role": "user", "content": "hello"}])
+
+        headers = {key.lower() for key in server.chat_requests[0].headers}
+        assert "authorization" not in headers
+        assert "x-ollama-token" not in headers
+
     def test_reported_model_overrides_the_configured_one(self):
         server = FakeOllamaServer([ok_chat(model="llama3.2:3b-custom")])
         adapter = make_adapter(server)

@@ -14,11 +14,12 @@ import os
 
 import httpx
 from fastapi import APIRouter
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 
-from app.api.schemas import HealthResponse, ReadyResponse
-from app.application.services.ollama_status_probe import get_ollama_status
-from app.core.config import REQUIRED_RUNTIME_ENV_KEYS
+from app.api.schemas import ReadyResponse
+from app.application.services.ollama_first_adapter import OllamaFirstAdapter
+from app.core.config import REQUIRED_RUNTIME_ENV_KEYS, settings
+import app.application.services.shared_router as shared_router_module
 
 logger = logging.getLogger(__name__)
 
@@ -57,26 +58,46 @@ def _database_check() -> dict:
     return {"status": "ok"}
 
 
-@router.get("/health", response_model=HealthResponse, summary="Liveness probe")
-@router.get("/api/health", response_model=HealthResponse, summary="Liveness probe (§28)")
+def _ai_check() -> dict:
+    """Informational AI-channel status (no network I/O)."""
+    huggingface = "configured" if (settings.huggingface_token or "").strip() else "missing"
+    if not settings.use_ollama:
+        ollama = "disabled"
+    else:
+        adapter = getattr(shared_router_module, "_adapter", None)
+        if isinstance(adapter, OllamaFirstAdapter):
+            ollama = "unreachable" if adapter.circuit_state == "OPEN" else "enabled"
+        else:
+            # No adapter has been built yet (or it could not be constructed):
+            # no connect failure has been recorded, so report enabled.
+            ollama = "enabled"
+    return {"huggingface": huggingface, "ollama": ollama}
+
+
+@router.get("/health", include_in_schema=False)
+@router.get("/api/health", include_in_schema=False)
 def health() -> dict:
-    return {"status": "ok", "service": "ai-career-assistant"}
+    return {"status": "ok"}
+
+
+@router.head("/health", include_in_schema=False)
+@router.head("/api/health", include_in_schema=False)
+def health_head() -> Response:
+    return Response(status_code=200)
 
 
 @router.get("/api/ready", response_model=ReadyResponse, summary="Readiness probe (§28)")
 def readiness() -> JSONResponse:
     config = _config_check()
     database = _database_check()
+    ai = _ai_check()
     ready = bool(config["ok"]) and database["status"] == "ok"
-    # Ollama is strictly informational for readiness: it never gates the
-    # 200/503 decision. The cluster keeps serving when Ollama is down, just as
-    # with any degraded optional channel. See §RD-01.
-    ollama = get_ollama_status()
-    checks = {"config": config, "database": database, "ollama": ollama.as_check()}
+    checks = {"config": config, "database": database, "ai": ai}
     return JSONResponse(
         status_code=200 if ready else 503,
         content={
             "status": "ready" if ready else "not_ready",
             "checks": checks,
+            "ai": ai,
         },
     )

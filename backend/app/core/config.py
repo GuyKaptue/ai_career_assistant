@@ -5,11 +5,12 @@ from pathlib import Path
 
 import httpx
 
+# Option 3 runtime policy: only Supabase is required at boot; HF_TOKEN and
+# Ollama are optional (degraded readiness, never 503 gating).
 REQUIRED_RUNTIME_ENV_KEYS = (
     "SUPABASE_URL",
     "SUPABASE_SERVICE_ROLE_KEY",
     "SUPABASE_JWT_SECRET",
-    "HF_TOKEN",
 )
 
 
@@ -148,11 +149,14 @@ class AppSettings:
     use_ollama: bool = True  # try local Ollama first, then Hugging Face, then template
     ollama_base_url: str = "http://localhost:11434"  # in Docker: http://ollama:11434
     ollama_model: str = "llama3.2:3b"  # alternatives: mistral:7b, qwen3:8b
-    ollama_timeout_seconds: float = 120.0  # full generation timeout
+    ollama_timeout_seconds: float = 10.0  # full generation timeout
     ollama_connect_timeout_seconds: float = 3.0  # fast fail so HF fallback stays snappy
     ollama_keep_alive: str = "5m"  # how long Ollama keeps the model loaded
     ollama_temperature: float = 0.3  # low for factual career documents
     ollama_num_ctx: int = 8192  # context window (tokens) per Ollama call (F1)
+    # --- Ollama remote access (tunnel). Header is sent only when both are set.
+    ollama_auth_header: str | None = None
+    ollama_auth_token: str | None = None
 
     @classmethod
     def from_env(cls) -> "AppSettings":
@@ -182,13 +186,15 @@ class AppSettings:
             ollama_base_url=(os.getenv("OLLAMA_BASE_URL", "http://localhost:11434") or "").strip()
             or "http://localhost:11434",
             ollama_model=(os.getenv("OLLAMA_MODEL", "llama3.2:3b") or "").strip() or "llama3.2:3b",
-            ollama_timeout_seconds=parse_float_setting(os.getenv("OLLAMA_TIMEOUT_SECONDS"), 120.0, minimum=1.0),
+            ollama_timeout_seconds=parse_float_setting(os.getenv("OLLAMA_TIMEOUT_SECONDS"), 10.0, minimum=1.0),
             ollama_connect_timeout_seconds=parse_float_setting(
                 os.getenv("OLLAMA_CONNECT_TIMEOUT_SECONDS"), 3.0, minimum=0.5
             ),
             ollama_keep_alive=(os.getenv("OLLAMA_KEEP_ALIVE", "5m") or "").strip() or "5m",
             ollama_temperature=parse_float_setting(os.getenv("OLLAMA_TEMPERATURE"), 0.3),
             ollama_num_ctx=parse_int_setting(os.getenv("OLLAMA_NUM_CTX"), 8192, minimum=512),
+            ollama_auth_header=(os.getenv("OLLAMA_AUTH_HEADER") or "").strip() or None,
+            ollama_auth_token=(os.getenv("OLLAMA_AUTH_TOKEN") or "").strip() or None,
         )
 
 

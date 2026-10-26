@@ -126,7 +126,7 @@ class TestDocumentedVariables:
             documented[name] = default.strip()
         for name, expected in (
             ("OLLAMA_MODEL", "llama3.2:3b"),
-            ("OLLAMA_TIMEOUT_SECONDS", "120"),
+            ("OLLAMA_TIMEOUT_SECONDS", "10"),
             ("OLLAMA_CONNECT_TIMEOUT_SECONDS", "3"),
             ("OLLAMA_KEEP_ALIVE", "5m"),
             ("OLLAMA_TEMPERATURE", "0.3"),

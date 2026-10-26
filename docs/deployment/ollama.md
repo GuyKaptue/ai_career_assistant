@@ -114,7 +114,7 @@ All defaults are read from `backend/app/core/config.py` and
 | `USE_OLLAMA` | `true` | Master switch. `false` makes the backend behave as before this change. | `true`, `false` | backend |
 | `OLLAMA_BASE_URL` | `http://localhost:11434` | Where Ollama runs. **Compose overrides this to `http://ollama:11434`** because inside the container network `localhost` is the backend itself. | `http`/`https` URL, no credentials | backend |
 | `OLLAMA_MODEL` | `llama3.2:3b` | Model Ollama must have pulled; the same variable drives the pull one-shot. | any Ollama tag | backend + compose |
-| `OLLAMA_TIMEOUT_SECONDS` | `120` | Whole-request read timeout. | `> 0` | backend |
+| `OLLAMA_TIMEOUT_SECONDS` | `10` | Whole-request read timeout. | `> 0` | backend |
 | `OLLAMA_CONNECT_TIMEOUT_SECONDS` | `3` | Connect timeout, also the whole-request budget for the readiness probe. | `> 0` | backend |
 | `OLLAMA_KEEP_ALIVE` | `5m` | How long Ollama keeps the model in memory after a call. | Ollama duration string | backend |
 | `OLLAMA_TEMPERATURE` | `0.3` | Sampling temperature for career tasks. | `0.0` – `2.0` | backend |
