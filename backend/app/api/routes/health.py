@@ -16,10 +16,10 @@ import httpx
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse, Response
 
+import app.application.services.shared_router as shared_router_module
 from app.api.schemas import ReadyResponse
 from app.application.services.ollama_first_adapter import OllamaFirstAdapter
 from app.core.config import REQUIRED_RUNTIME_ENV_KEYS, settings
-import app.application.services.shared_router as shared_router_module
 
 logger = logging.getLogger(__name__)
 

@@ -273,9 +273,7 @@ class TestCircuitBreaker:
         # and every call did reach Ollama
         assert len(server.chat_requests) == 3
 
-    @pytest.mark.parametrize(
-        "script", [connect_refused(), None], ids=["unavailable", "server_error"]
-    )
+    @pytest.mark.parametrize("script", [connect_refused(), None], ids=["unavailable", "server_error"])
     def test_availability_classes_open_the_breaker(self, monkeypatch, script):
         enable_ollama(monkeypatch)
         entry = http(503) if script is None else script

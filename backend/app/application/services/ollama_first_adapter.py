@@ -17,7 +17,6 @@ from typing import Any, Final, Protocol
 
 from app.application.services.ai_model_router import (
     MODEL_UNAVAILABLE,
-    RATE_LIMITED,
     TIMEOUT,
     CircuitBreaker,
     classify_failure,

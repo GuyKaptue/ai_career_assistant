@@ -176,8 +176,12 @@ class OllamaInferenceAdapter:
         )
         resolved_header = auth_header if auth_header is not None else settings.ollama_auth_header
         resolved_token = auth_token if auth_token is not None else settings.ollama_auth_token
-        self._auth_header = resolved_header.strip() if isinstance(resolved_header, str) and resolved_header.strip() else None
-        self._auth_token = resolved_token.strip() if isinstance(resolved_token, str) and resolved_token.strip() else None
+        self._auth_header = (
+            resolved_header.strip() if isinstance(resolved_header, str) and resolved_header.strip() else None
+        )
+        self._auth_token = (
+            resolved_token.strip() if isinstance(resolved_token, str) and resolved_token.strip() else None
+        )
         self._keep_alive = keep_alive if keep_alive is not None else settings.ollama_keep_alive
         self._temperature = default_temperature if default_temperature is not None else settings.ollama_temperature
         if read_timeout <= 0 or self._connect_timeout <= 0:
