@@ -43,15 +43,9 @@ discovering jobs across free public APIs.
 
 ## 3. Data model
 
-| Table | Key | Ownership |
-|-------|-----|-----------|
-| `profiles` | `user_id` (FK → `auth.users`) | `auth.uid() = user_id` |
-| `documents` | `id` (UUID) | `auth.uid() = user_id` |
-| `job_applications` | `application_id` (UUID) | `auth.uid() = user_id` |
-
-Every row is scoped by `user_id`. Row-level security (RLS) enforces
-ownership at the database layer; the API layer derives identity from the
-JWT `sub` claim and never from the request body.
+The authoritative, up-to-date data inventory — every schema table with its
+primary key, ownership model and the columns that hold user PII — now lives in
+[`docs/privacy/overview.md`](../privacy/overview.md#stored-data-inventory).
 
 ## 4. Invariants
 

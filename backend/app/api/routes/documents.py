@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+import re
+
 from fastapi import APIRouter, Depends
 from fastapi.responses import PlainTextResponse, Response
 
-from app.api.schemas import COMMON_ERROR_RESPONSES, DocumentPayload
+from app.api.schemas import COMMON_ERROR_RESPONSES, DocumentPayload, RenderPayload
 from app.application.services.document_generation import (
     render_document_to_docx,
     render_document_to_html,
@@ -16,8 +18,10 @@ from app.application.services.document_retrieval import (
     get_document_retrieval,
 )
 from app.application.services.document_store import document_store
+from app.application.services.generation_context import resolve_template
 from app.core.errors import ExportError, NotFoundError, ValidationError
-from app.core.security.dependencies import get_current_user
+from app.core.security.dependencies import get_current_user, get_optional_user
+from app.domain.templates.themes import THEMES
 
 router = APIRouter(prefix="/api/v1/documents", tags=["documents"], responses=COMMON_ERROR_RESPONSES)
 
@@ -126,40 +130,80 @@ def restore_document_version(
 def export_document(
     document_id: str,
     format: str = "html",
+    theme_id: str = "",
+    country: str = "",
+    sidebar: str = "",
     current_user: dict = Depends(get_current_user),
 ) -> Response:
     document = _get_owned_document(document_id, current_user["sub"])
 
     payload = document.to_dict()
-    if format == "html":
-        return PlainTextResponse(render_document_to_html(payload))
-
+    resolved = resolve_template(
+        current_user["sub"], str(payload.get("template_id") or ""), str(payload.get("document_type") or "cv")
+    )
+    if resolved is not None:  # a user template renders with its built-in base design
+        payload["template_id"] = resolved.render_template_id
+    if theme_id and theme_id not in THEMES:
+        raise ValidationError(f"Unknown theme '{theme_id}'.")
+    if sidebar not in ("", "left", "right"):
+        raise ValidationError("sidebar must be 'left' or 'right'.")
+    if theme_id or country or sidebar:
+        payload["theme_id"], payload["country"], payload["sidebar"] = theme_id, country, sidebar
     if format == "text":
         return PlainTextResponse(document.content)
+    return _render_response(payload, format, document.title)
 
-    if format == "pdf":
-        try:
-            pdf_bytes = render_document_to_pdf(payload)
-        except Exception as exc:
-            raise ExportError("PDF export failed.", internal=str(exc)) from exc
-        return Response(
-            content=pdf_bytes,
-            media_type="application/pdf",
-            headers={"Content-Disposition": f'attachment; filename="{document.title}.pdf"'},
-        )
 
-    if format == "docx":
-        try:
-            docx_bytes = render_document_to_docx(payload)
-        except Exception as exc:
-            raise ExportError("DOCX export failed.", internal=str(exc)) from exc
-        return Response(
-            content=docx_bytes,
-            media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            headers={"Content-Disposition": f'attachment; filename="{document.title}.docx"'},
-        )
+_MEDIA = {
+    "pdf": "application/pdf",
+    "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+}
 
-    raise ValidationError("Unsupported export format. Use html, text, pdf, or docx.")
+
+def _safe_filename(title: str) -> str:
+    """ASCII-safe file stem for Content-Disposition (no quotes, control chars or path separators)."""
+    stem = re.sub(r"\.{2,}", "_", re.sub(r"[^A-Za-z0-9._ -]+", "_", title)).strip(" ._") or "document"
+    return stem[:80]
+
+
+def _render_response(payload: dict, fmt: str, title: str) -> Response:
+    if fmt == "html":
+        return PlainTextResponse(render_document_to_html(payload))
+    if fmt not in _MEDIA:
+        raise ValidationError("Unsupported export format. Use html, text, pdf, or docx.")
+    try:
+        data = render_document_to_pdf(payload) if fmt == "pdf" else render_document_to_docx(payload)
+    except Exception as exc:
+        raise ExportError(f"{fmt.upper()} export failed.", internal=str(exc)) from exc
+    return Response(
+        content=data,
+        media_type=_MEDIA[fmt],
+        headers={"Content-Disposition": f'attachment; filename="{_safe_filename(title)}.{fmt}"'},
+    )
+
+
+@router.post("/render", response_model=None)
+def render_document(body: RenderPayload, current_user: dict | None = Depends(get_optional_user)) -> Response:
+    """Render text in a template design and return the file; nothing is saved.
+
+    Anonymous callers can use built-in templates; a user's own template id needs their token.
+    """
+    user_id = current_user["sub"] if current_user else None
+    resolved = resolve_template(user_id, body.template_id, body.document_type)
+    if resolved is None:
+        raise ValidationError(f"Template '{body.template_id}' is not available for '{body.document_type}'.")
+    if body.theme_id and body.theme_id not in THEMES:
+        raise ValidationError(f"Unknown theme '{body.theme_id}'.")
+    payload = {
+        "title": body.title,
+        "content": body.content,
+        "document_type": body.document_type,
+        "template_id": resolved.render_template_id,
+        "theme_id": body.theme_id,
+        "country": body.country.upper(),
+        "sidebar": body.sidebar,
+    }
+    return _render_response(payload, body.format, body.title)
 
 
 @router.post("/{document_id}/index")

@@ -45,114 +45,115 @@ DEFAULT_TOP_K = 5
 DEFAULT_MIN_SIMILARITY = 0.35
 MAX_CONTEXT_CHARS = 4000
 
-# Seed corpus. IDs are deterministic so seeding is
-# idempotent across restarts.
+# Seed corpus. The ids are deterministic UUIDv5 values so the seeding is
+# idempotent across restarts and so they fit the ``knowledge_entries.id``
+# uuid column (a plain string id is rejected by Postgres).
 SEED_CORPUS: tuple[tuple[str, str, str, str], ...] = (
     # (id, domain, content, source)
     (
-        "seed-cv-001",
+        "4b8df5d3-3fc7-59cc-b57c-61be6877022d",
         "cv_best_practices",
         "Tailor the CV to each job description: mirror the keywords and requirements listed in the posting.",
         "career-knowledge-base:v1",
     ),
     (
-        "seed-cv-002",
+        "7ef398ad-fd11-58b5-834b-f36a498cf4e6",
         "cv_best_practices",
         "Quantify achievements with numbers (percentages, revenue, team size) instead of vague responsibilities.",
         "career-knowledge-base:v1",
     ),
     (
-        "seed-cv-003",
+        "957c999f-dc8b-59f6-a09a-40d6cafba3d2",
         "cv_best_practices",
         "Start bullet points with strong action verbs (led, built, shipped, reduced) rather than duty descriptions.",
         "career-knowledge-base:v1",
     ),
     (
-        "seed-cv-004",
+        "2b42ce2b-601c-5797-947d-64f5b6a788aa",
         "cv_best_practices",
         "Keep formatting ATS-friendly: standard section headings, no tables or text boxes, common fonts.",
         "career-knowledge-base:v1",
     ),
     (
-        "seed-cv-005",
+        "169c479a-8f05-582b-9427-d33a3c49d625",
         "cv_best_practices",
         "Limit the CV to one page for under ten years of experience; two pages maximum for senior roles.",
         "career-knowledge-base:v1",
     ),
     (
-        "seed-cl-001",
+        "a9bd72bd-a281-5342-a7e0-3e60d12d30b7",
         "cover_letter_guidelines",
         "Open the cover letter with the exact role title and where you found the opening.",
         "career-knowledge-base:v1",
     ),
     (
-        "seed-cl-002",
+        "225a77bb-594b-59df-b4a4-6cc948249456",
         "cover_letter_guidelines",
         "Match two or three job requirements to concrete examples from your experience in the body paragraphs.",
         "career-knowledge-base:v1",
     ),
     (
-        "seed-cl-003",
+        "0b4f1283-7ef9-59a3-9edc-758fc57527d7",
         "cover_letter_guidelines",
         "Close with a clear call to action: an interview request and availability for follow-up.",
         "career-knowledge-base:v1",
     ),
     (
-        "seed-cl-004",
+        "e2d37687-8f81-5076-a076-d45c9f4da1b5",
         "cover_letter_guidelines",
         "Address the hiring manager by name whenever the posting does not state 'confidential'.",
         "career-knowledge-base:v1",
     ),
     (
-        "seed-ca-001",
+        "ade951b0-f13e-56e3-8b9e-4abbb31fdbbf",
         "career_advice",
         "Research the company's recent news, products, and mission before the interview.",
         "career-knowledge-base:v1",
     ),
     (
-        "seed-ca-002",
+        "cfc04108-d30d-59a8-a253-38d09174f353",
         "career_advice",
         "Prepare STAR stories (Situation, Task, Action, Result) for behavioral interview questions.",
         "career-knowledge-base:v1",
     ),
     (
-        "seed-ca-003",
+        "8034dc5d-2b57-53fe-a112-974486a263fc",
         "career_advice",
         "Network before applying: referrals dramatically increase interview callback rates.",
         "career-knowledge-base:v1",
     ),
     (
-        "seed-ca-004",
+        "eb59a7bb-a2db-5166-a578-224b01276be5",
         "career_advice",
         "Follow up within 24 hours with a short thank-you note referencing a specific discussion point.",
         "career-knowledge-base:v1",
     ),
     (
-        "seed-hr-001",
+        "4f6cfdea-1753-5dbb-8310-b4e2a89a037c",
         "hr_recommendations",
         "Recruiters spend only a few seconds on the initial CV scan, so put the most relevant facts first.",
         "career-knowledge-base:v1",
     ),
     (
-        "seed-hr-002",
+        "70ea3112-be21-50b7-85dd-218bbc9663a8",
         "hr_recommendations",
         "Explain employment gaps briefly and positively: focus on what you learned or did during the gap.",
         "career-knowledge-base:v1",
     ),
     (
-        "seed-hr-003",
+        "716e833a-d98e-5f1b-b99b-75abc86e049c",
         "hr_recommendations",
         "Align your summary with the job posting's language so both ATS and human reviewers see the fit.",
         "career-knowledge-base:v1",
     ),
     (
-        "seed-hr-004",
+        "e9569849-df19-5a76-acad-4e5a83c1f339",
         "hr_recommendations",
         "Never fabricate experience or credentials; verification failures end most hiring processes.",
         "career-knowledge-base:v1",
     ),
     (
-        "seed-cr-de-001",
+        "9b831f67-94f4-5836-a278-77dd728be9a1",
         "country_rules",
         "Germany: follow DIN 5008 for formal letters; CVs traditionally include a "
         "professional photo (optional since 2024 AGG guidance) and exclude age, "
@@ -160,49 +161,49 @@ SEED_CORPUS: tuple[tuple[str, str, str, str], ...] = (
         "din-5008:2024",
     ),
     (
-        "seed-cr-de-002",
+        "c030c01b-d929-5daa-b94f-f58e239e6ee1",
         "country_rules",
         "Germany: applications (Bewerbung) typically include a cover letter "
         "(Anschreiben), CV (Lebenslauf), and certificates (Zeugnisse).",
         "din-5008:2024",
     ),
     (
-        "seed-cr-fr-001",
+        "9e9d985d-7946-5705-aac1-8f20b625bd50",
         "country_rules",
         "France: a professional photo is common on CVs; keep the document to one "
         "page and include date of birth only if comfortable.",
         "career-knowledge-base:v1",
     ),
     (
-        "seed-cr-fr-002",
+        "f182dbcd-330c-5488-ab0d-f70b1aa0999b",
         "country_rules",
         "France: letters often close with the formal formula 'Je vous prie "
         "d'agréer, Madame, Monsieur, l'expression de mes salutations distinguées.'",
         "career-knowledge-base:v1",
     ),
     (
-        "seed-cr-us-001",
+        "164bd04d-899d-5146-b869-39ae1b5b8ffe",
         "country_rules",
         "United States: no photo, no age, no marital status; one page for "
         "early-career candidates; include a brief summary instead of an objective.",
         "career-knowledge-base:v1",
     ),
     (
-        "seed-cr-us-002",
+        "bd0329a9-8472-536e-8c95-83e008028931",
         "country_rules",
         "United States: salary history is prohibited in many states; never include "
         "it unless explicitly requested where legal.",
         "career-knowledge-base:v1",
     ),
     (
-        "seed-cr-nl-001",
+        "2e6283bb-bf16-5e32-84a8-1ff1fa07add7",
         "country_rules",
         "Netherlands: CVs commonly include personal details (date of birth, "
         "nationality) and a professional photo is optional.",
         "career-knowledge-base:v1",
     ),
     (
-        "seed-cr-nl-002",
+        "46f6ea64-4bf8-5390-b557-0d546c3d5563",
         "country_rules",
         "Netherlands: cover letters are typically short (three to four paragraphs) " "and direct in tone.",
         "career-knowledge-base:v1",

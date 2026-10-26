@@ -22,6 +22,7 @@ from app.api.schemas import (
     ChatCompletionPayload,
     ChatSessionCreatePayload,
 )
+from app.application.services.chat_input import input_limits_error
 from app.application.services.chat_service import run_chat_turn
 from app.application.services.chat_store import chat_store
 from app.core.errors import NotFoundError, ValidationError
@@ -83,6 +84,12 @@ def create_completion(body: ChatCompletionPayload, current_user: dict = Depends(
     if not message:
         raise ValidationError("message is required.")
 
+    document_context = payload.get("document_context") or ""
+    job_text = payload.get("job_text")
+    limit_error = input_limits_error(message, job_text, document_context)
+    if limit_error:
+        raise ValidationError(limit_error)
+
     session_id = payload.get("session_id")
     if session_id:
         session = chat_store.get_session(session_id, current_user["sub"])
@@ -101,7 +108,6 @@ def create_completion(body: ChatCompletionPayload, current_user: dict = Depends(
             raise ValidationError(str(exc)) from exc
 
     model_id = payload.get("model_id") or session.model_id
-    document_context = payload.get("document_context") or ""
 
     result = run_chat_turn(
         session,
@@ -109,6 +115,12 @@ def create_completion(body: ChatCompletionPayload, current_user: dict = Depends(
         user_id=current_user["sub"],
         model_id=model_id,
         document_context=document_context,
+        preferences=payload.get("preferences"),
+        job_url=payload.get("job_url"),
+        job_text=job_text,
+        document_type=payload.get("document_type"),
+        template_id=payload.get("template_id"),
+        theme_id=payload.get("theme_id"),
     )
     result["session"] = session.to_dict(include_messages=False)
     return result

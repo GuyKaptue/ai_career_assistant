@@ -104,3 +104,45 @@ export async function apiUpload(path, { session, formData }) {
   debugLog('api', `UPLOAD OK ${path} -> ${response.status}`);
   return response.json();
 }
+
+/**
+ * Fetch a binary response (document render / export / download) with the session token.
+ *
+ * The download is a fetch with the auth header, then a blob — unlike
+ * {@link apiRequest} the body is bytes, not JSON, so we return the raw
+ * {@link Blob} and rethrow the same error shape on failure. `method` /
+ * `body` support the stateless POST /documents/render export (a GET remains for
+ * fetching a public sample or an existing export).
+ */
+export async function apiBlob(path, { session, method = 'GET', body, signal } = {}) {
+  debugLog('api', `${method} ${path}`, { authenticated: Boolean(session?.access_token), blob: true });
+  let response;
+  try {
+    response = await fetch(`${apiBase}${path}`, {
+      method,
+      headers: authHeaders(session),
+      ...(body === undefined ? {} : { body: JSON.stringify(body) }),
+      ...(signal ? { signal } : {}),
+    });
+  } catch (error) {
+    if (error?.name === 'AbortError') {
+      debugLog('api', `ABORTED ${method} ${path}`);
+      throw error;
+    }
+    debugLog('api', `BLOB NETWORK FAILED ${path}`, { message: error?.message || String(error) });
+    throw error;
+  }
+  if (!response.ok) {
+    let detail = '';
+    try {
+      const payload = await response.json();
+      detail = payload.detail || payload.message || '';
+    } catch {
+      detail = '';
+    }
+    debugLog('api', `BLOB FAILED ${path} -> ${response.status}`, { detail: detail.slice(0, 500) });
+    throw new Error(detail || `Request failed: ${response.status} ${response.statusText}`);
+  }
+  debugLog('api', `OK ${path} -> ${response.status}`, { blob: true });
+  return response.blob();
+}

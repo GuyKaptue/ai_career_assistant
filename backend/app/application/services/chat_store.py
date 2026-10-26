@@ -12,6 +12,7 @@ import logging
 import uuid
 
 from app.core.config import settings
+from app.core.errors import DatabaseError
 from app.core.persistence import InMemoryRepository, SupabaseRepository
 from app.domain.chat.models import CHAT_LANGUAGES, CHAT_MODES, ChatMessage, ChatSession, utc_now_iso
 
@@ -117,6 +118,26 @@ class ChatStore:
             return deleted
         self._sessions.pop(session_id, None)
         return True
+
+    def set_session_job(self, session: ChatSession, job_context: dict | None) -> None:
+        """Remember the job this session is about, on the session row.
+
+        The row is the source of truth: under Supabase the context is PATCHed
+        onto ``chat_sessions.job_context`` so it survives another worker, a
+        restart or a scaled deployment. The in-memory copy is only a cache.
+
+        The context holds the posting text but never CV text, and it is
+        deleted together with the session. Nothing about it is logged.
+        """
+        session.job_context = job_context
+        session.session_job = job_context
+        if not job_context:
+            return
+        if settings.supabase_url and settings.supabase_service_role_key:
+            try:
+                self._sessions_backend.update(session.id, {"job_context": job_context})
+            except (KeyError, DatabaseError):
+                logger.info("chat session job context could not be persisted")
 
     def append_message(
         self,

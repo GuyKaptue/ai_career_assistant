@@ -8,6 +8,19 @@ The database layer is aligned with the Supabase pattern of Row-Level Security an
 
 Local inference is credential-free by design: Ollama serves model weights from the `ollama_data` volume and reads no API key, so `USE_OLLAMA` and the `OLLAMA_*` variables add no secret to the configuration surface. Because Ollama has no authentication of its own, the compose stack binds it to `127.0.0.1` only and must never publish port `11434` on `0.0.0.0`; other containers reach it over the compose network, which that binding does not affect. Remote access requires a reverse proxy that terminates TLS and enforces authentication — see [`docs/deployment/ollama.md`](../deployment/ollama.md#security).
 
-Profile, application-tracker, and saved-document endpoints require a verified bearer token. The authenticated user's `sub` claim is the only source of record ownership: request payloads cannot assign another owner, and records belonging to another user return `404` to avoid disclosing their existence. Health, template discovery, document generation, resume analysis, and job search remain public endpoints because they do not read or mutate saved user records.
+The authenticated user's `sub` claim is the only source of record ownership: request payloads cannot assign another owner, and records belonging to another user return `404` to avoid disclosing their existence.
+
+Every route is one of three kinds, and the distinction is per route, not per
+area:
+
+| Kind | What it means | Routes |
+|---|---|---|
+| **required auth** | a verified bearer token is mandatory; without it the route answers `401` | the profile, application-tracker, saved-document, document-version, position-extraction, knowledge-ingest, project and chat routes |
+| **optional auth** | the route works without a token, and uses one when present | `GET /api/v1/templates`, `GET /api/v1/jobs/search`, `POST /api/v1/documents/{cv,cover-letter,resignation}/generate`, `POST /api/v1/documents/render` |
+| **public** | no token is read; the route never touches a saved user record | `GET /health`, `GET /api/health`, `GET /api/ready`, `GET /api/v1/models`, `GET /api/v1/themes`, `GET /api/v1/country-profiles`, `GET /api/v1/templates/{id}/sample`, `POST /api/v1/templates/preview`, `GET /api/v1/knowledge/search`, `POST /api/v1/resume/check`, `POST /api/v1/resume/extract` |
+
+The per-route list is generated from the code; see
+[`docs/api/overview.md`](../api/overview.md) for the table and the command
+that regenerates it.
 
 Prompts and generated content never reach logs: routing decisions, model ids and latency are recorded, while the prompt, the completion and the provider base URL are excluded. That property is enforced by a static AST check in `backend/tests/contract/test_ollama_contracts.py` and by `caplog` assertions in the API-layer tests.

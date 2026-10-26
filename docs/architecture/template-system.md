@@ -6,7 +6,7 @@
 
 Rationale:
 - `PROJECT_DESCRIBTION.md` names Reactive Resume (MIT, 12+ templates) as the template direction — permissively licensed, buildable now.
-- `TEMPLATE_PROMPT.md` names Resumaker.ai (proprietary) as a *reference*, explicitly forbidding copying source code, assets, APIs, or claiming integration.
+- The original template specification names Resumaker.ai (proprietary) as a *reference*, explicitly forbidding copying source code, assets, APIs, or claiming integration.
 - These are compatible: implement original templates on an MIT-compatible engine in the spirit of Reactive Resume, using Resumaker.ai's publicly observable structure (typography hierarchy, section order, spacing, contact/skills/experience presentation) as design input only.
 
 What this means:

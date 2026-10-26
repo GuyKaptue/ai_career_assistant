@@ -237,7 +237,38 @@ def generate_resignation_letter_document(
     )
 
 
+def _styled_theme(document: dict):
+    """Theme for a document whose ``template_id`` is a built-in template, else ``None``."""
+    template_id = str(document.get("template_id") or "")
+    if not template_id:
+        return None
+    kind = str(document.get("document_type") or "cv")
+    template = TemplateRegistry().get(template_id, kind)
+    if template is None:
+        return None
+    from app.infrastructure.document_export.styled import theme_from_template
+
+    return theme_from_template(
+        dict(template.metadata),
+        kind,
+        theme_id=str(document.get("theme_id") or ""),
+        country=str(document.get("country") or ""),
+        sidebar=str(document.get("sidebar") or ""),
+        avatar=False,
+    )
+
+
 def render_document_to_html(document: dict) -> str:
+    theme = _styled_theme(document)
+    if theme is not None:
+        from app.infrastructure.document_export.styled import render_styled_html
+
+        return render_styled_html(
+            str(document.get("title") or ""),
+            str(document.get("content") or ""),
+            str(document.get("document_type") or "cv"),
+            theme,
+        )
     title = escape(str(document.get("title") or "Document"))
     content = escape(str(document.get("content") or "")).replace("\n", "<br />")
     return (
@@ -252,7 +283,22 @@ def render_document_to_html(document: dict) -> str:
     ).format(title=title, content=content)
 
 
+def _pdf_escape(text: str) -> str:
+    """Neutralise reportlab Paragraph markup so user text is rendered literally."""
+    return text.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+
+
 def render_document_to_pdf(document: dict) -> bytes:
+    theme = _styled_theme(document)
+    if theme is not None:
+        from app.infrastructure.document_export.styled import render_styled_pdf
+
+        return render_styled_pdf(
+            str(document.get("title") or ""),
+            str(document.get("content") or ""),
+            str(document.get("document_type") or "cv"),
+            theme,
+        )
     from reportlab.lib.pagesizes import letter
     from reportlab.lib.styles import getSampleStyleSheet
     from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer
@@ -261,13 +307,13 @@ def render_document_to_pdf(document: dict) -> bytes:
     doc = SimpleDocTemplate(buffer, pagesize=letter)
     style_sheet = getSampleStyleSheet()
     styles = [style_sheet["Title"], style_sheet["BodyText"]]
-    story = [Paragraph(str(document.get("title") or "Document"), styles[0]), Spacer(1, 12)]
+    story = [Paragraph(_pdf_escape(str(document.get("title") or "Document")), styles[0]), Spacer(1, 12)]
 
     for line in str(document.get("content") or "").splitlines() or [""]:
         if not line.strip():
             story.append(Spacer(1, 6))
             continue
-        story.append(Paragraph(line, styles[1]))
+        story.append(Paragraph(_pdf_escape(line), styles[1]))
 
     doc.build(story)
     return buffer.getvalue()
@@ -287,6 +333,17 @@ def render_document_to_docx(document: dict) -> bytes:
             return render_cover_letter_to_docx(document)
         except ImportError:
             pass
+
+    theme = _styled_theme(document)
+    if theme is not None:
+        from app.infrastructure.document_export.styled import render_styled_docx
+
+        return render_styled_docx(
+            str(document.get("title") or ""),
+            str(document.get("content") or ""),
+            str(document.get("document_type") or "cv"),
+            theme,
+        )
 
     doc = Document()
     doc.add_heading(str(document.get("title") or "Document"), level=1)

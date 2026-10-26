@@ -1,6 +1,6 @@
 # Cover-letter templates
 
-Six cover-letter templates are registered in
+Ten cover-letter templates are registered in
 `backend/app/domain/templates/template_registry.py`. The structured
 renderer in `backend/app/infrastructure/document_export/cover_letter_docx.py`
 follows a roughly DIN-5008 order:
@@ -10,14 +10,18 @@ body → closing → signature.
 
 ## Catalog
 
-| ID | Name | Locales | Tone | Notes |
-|----|------|---------|------|-------|
-| formal-german-din5008 | Formal (German DIN 5008) | de, en, fr | formal | DIN-5008 order, German defaults |
-| classic-letter | Classic | en, de, fr | formal | Traditional business letter |
-| warm-letter | Warm | en, de, fr | warm | Personal, relationship-focused |
-| brief-letter | Brief | en, de, fr | brief | Concise, one page |
-| creative-letter | Creative | en, de, fr | creative | Distinctive, design-forward |
-| technical-letter | Technical | en, de, fr | formal | Technical role focus |
+| ID | Name | Locales | Layout | Description |
+|----|------|---------|--------|-------------|
+| brief-letter | Brief Letter | en, de | brief | A concise, three-paragraph letter for high-volume applications. |
+| centered-serif-letter | Centered Serif Letter | en, de, fr | centered | Centered serif letterhead with a rule, traditional and formal. |
+| classic-letter | Classic Letter | en, fr, de | formal | A refined, professional letter structure for formal applications. |
+| creative-letter | Creative Letter | en, es, fr | creative | A narrative-driven letter for creative and marketing roles. |
+| executive-letter | Executive Letter | en, de, fr | executive-letter | Dark executive banner with a serif body for senior roles. |
+| formal-german-din5008 | Formal German DIN 5008 | de, en, fr | din5008 | Structured formal German business letter (sender, recipient, date, subject, salutation, body, closing). |
+| letterhead-band | Letterhead Band | en, de, fr | letterhead | Letter with a coloured letterhead band carrying the sender name. |
+| modern-letter | Modern Letter | en, de, fr | modern-letter | Clean sans-serif letter with an accent-coloured name. |
+| technical-letter | Technical Letter | en, de | technical | A structured letter emphasizing technical scope and impact. |
+| warm-letter | Warm Letter | en, fr, es | warm | A personable, enthusiastic tone for team-oriented cultures. |
 
 ## Tone selector
 

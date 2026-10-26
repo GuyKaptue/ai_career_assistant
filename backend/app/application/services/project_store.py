@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import uuid
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, Callable
 
 from app.core.config import settings
 from app.core.persistence import SupabaseRepository
@@ -43,12 +43,20 @@ class ProjectStore:
         )
         self._projects: dict[str, Project] = {}
         self._registry = TemplateRegistry()
+        #: ``(user_id, kind, template_id) -> bool``; lets a project use the user's own templates.
+        self.user_template_exists: Callable[[str, str, str], bool] | None = None
 
     # -- validation -----------------------------------------------------
-    def _validate_templates(self, cv_template: str | None, letter_template: str | None) -> None:
-        if cv_template is not None and not self._registry.supports(cv_template, "cv"):
+    def _template_ok(self, user_id: str, kind: str, template_id: str) -> bool:
+        if self._registry.supports(template_id, kind):
+            return True
+        check = self.user_template_exists
+        return bool(check and check(user_id, kind, template_id))
+
+    def _validate_templates(self, user_id: str, cv_template: str | None, letter_template: str | None) -> None:
+        if cv_template is not None and not self._template_ok(user_id, "cv", cv_template):
             raise ValueError(f"Unknown CV template '{cv_template}'.")
-        if letter_template is not None and not self._registry.supports(letter_template, "cover_letter"):
+        if letter_template is not None and not self._template_ok(user_id, "cover_letter", letter_template):
             raise ValueError(f"Unknown cover-letter template '{letter_template}'.")
 
     # -- CRUD -----------------------------------------------------------
@@ -66,7 +74,7 @@ class ProjectStore:
             raise ValueError("user_id is required for project creation.")
         if status not in VALID_PROJECT_STATUSES:
             raise ValueError(f"Unsupported status '{status}'.")
-        self._validate_templates(template_id, cover_letter_template_id)
+        self._validate_templates(user_id, template_id, cover_letter_template_id)
         project = Project(
             id=str(uuid.uuid4()),
             user_id=user_id,
@@ -113,7 +121,11 @@ class ProjectStore:
             clean["name"] = clean_name(clean["name"])
         if "status" in clean and clean["status"] not in VALID_PROJECT_STATUSES:
             raise ValueError(f"Unsupported status '{clean['status']}'.")
-        self._validate_templates(clean.get("template_id"), clean.get("cover_letter_template_id"))
+        if "template_id" in clean or "cover_letter_template_id" in clean:
+            existing = self.get(project_id)
+            if existing is None:
+                raise KeyError(project_id)
+            self._validate_templates(existing.user_id, clean.get("template_id"), clean.get("cover_letter_template_id"))
         clean["updated_at"] = datetime.now(timezone.utc).isoformat()
 
         backend = self._backend

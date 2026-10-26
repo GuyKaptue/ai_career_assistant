@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 
+from app.application.services.career_assistant import CareerTurn, run_career_turn
 from app.application.services.chat_store import chat_store
 from app.application.services.document_retrieval import get_document_retrieval
 from app.application.services.knowledge_base import get_knowledge_base
@@ -51,22 +52,36 @@ def build_chat_prompt(session: ChatSession, user_text: str, *, document_context:
     """
     task = MODE_TASKS.get(session.mode, "career_advice")
     mode_instruction = MODE_INSTRUCTIONS.get(session.mode, MODE_INSTRUCTIONS["general"])
-    history = "\n".join(
-        f"{'User' if message.role == 'user' else 'Assistant'}: {message.content[:2000]}"
-        for message in session.messages[-HISTORY_WINDOW:]
-    )
-    return "\n\n".join(
-        (
-            build_system_prompt(task, language=session.language),
-            build_task_prompt(
-                task,
-                instruction=f"Workspace mode ({session.mode}): {mode_instruction}. Answer the user's latest message.",
-                language=session.language,
-                document_context=document_context,
-                history=history,
-            ),
+    latest = (user_text or "").strip()[:2000]
+    messages = list(session.messages[-HISTORY_WINDOW:])
+    if latest and messages and messages[-1].role == "user" and messages[-1].content.strip()[:2000] == latest:
+        messages = messages[:-1]  # the latest message is stated explicitly below
+    lines = [f"{'User' if m.role == 'user' else 'Assistant'}: {m.content[:2000]}" for m in messages]
+    instruction = f"Workspace mode ({session.mode}): {mode_instruction}. Answer the user's latest message."
+    if latest:
+        instruction += f"\n\nLATEST USER MESSAGE:\n{latest}"
+
+    def render(history: str) -> str:
+        return "\n\n".join(
+            (
+                build_system_prompt(task, language=session.language),
+                build_task_prompt(
+                    task,
+                    instruction=instruction,
+                    language=session.language,
+                    document_context=document_context,
+                    history=history,
+                ),
+            )
         )
-    )[:MAX_PROMPT_CHARS]
+
+    # Drop the OLDEST turns first until the prompt fits, so the latest message
+    # and the output contract at the end are never cut off.
+    while True:
+        prompt = render("\n".join(lines))
+        if len(prompt) <= MAX_PROMPT_CHARS or not lines:
+            return prompt
+        lines = lines[1:]
 
 
 MODE_INSTRUCTIONS: dict[str, str] = {
@@ -107,12 +122,20 @@ def build_routing_audit(
     fallback_chain: list[str] | None = None,
     routing_score: float | None = None,
     failure_reason: str | None = None,
+    intent: str | None = None,
+    rule_id: str | None = None,
+    input_kind: str | None = None,
+    job_ingest_status: str | None = None,
+    source_host: str | None = None,
+    text_len: int | None = None,
+    job_len: int | None = None,
 ) -> dict[str, object]:
     """Per-message routing audit, stored on the assistant message.
 
     Explains *why* this model answered: which task triggered it, whether the
     model was auto-selected or manually pinned, what the output contract was,
-    and whether that contract passed, needed repair, or fell back.
+    and whether that contract passed, needed repair, or fell back. The job
+    fields are ids, counts and lengths only — never content.
     """
     audit: dict[str, object] = {
         "selected_model": selected_model,
@@ -124,9 +147,72 @@ def build_routing_audit(
         "contract_status": contract_status,
         "attempts": attempts,
     }
+    if intent is not None:
+        audit["intent"] = intent
+    if rule_id is not None:
+        audit["rule_id"] = rule_id
+    if input_kind is not None:
+        audit["input_kind"] = input_kind
+    if job_ingest_status is not None:
+        audit["job_ingest_status"] = job_ingest_status
+    if source_host is not None:
+        audit["source_host"] = source_host
+    if text_len is not None:
+        audit["text_len"] = text_len
+    if job_len is not None:
+        audit["job_len"] = job_len
     if failure_reason:
         audit["failure_reason"] = failure_reason
     return audit
+
+
+def _career_payload(session: ChatSession, career: CareerTurn, model_id: str | None) -> dict:
+    """Store the assistant message for a career turn and build the (additive) response payload."""
+    models = list(career.models)
+    selected = models[-1]["model_id"] if models else None
+    chain: list[str] = []
+    for item in models:
+        chain.extend(m for m in item["attempted_models"] if m not in chain)
+    routing = build_routing_audit(
+        career.task,
+        selection="manual_override" if model_id else "auto",
+        selected_model=selected,
+        contract_kind="json",
+        contract_status="passed" if career.ai_generated else "fallback",
+        attempts=career.attempts,
+        fallback_chain=chain,
+        intent=career.intent,
+        rule_id=career.rule_id,
+        input_kind=career.input_kind,
+        job_ingest_status=career.job_ingest_status,
+        source_host=career.source_host,
+        text_len=career.text_len,
+        job_len=career.job_len,
+    )
+    notice = AI_REVIEW_NOTICE if career.ai_generated else ""
+    message = chat_store.append_message(
+        session,
+        role="assistant",
+        content=f"{career.content}\n\n{notice}".rstrip(),
+        model_id=selected,
+        routing=routing,
+    )
+    return {
+        "session_id": session.id,
+        "message": message.to_dict(),
+        "model_id": selected,
+        "ai_generated": career.ai_generated,
+        "fallback": not career.ai_generated and career.intent != "clarify",
+        "fallback_reason": None,
+        "fallback_chain": chain,
+        "citations": [],
+        "review_notice": AI_REVIEW_NOTICE,
+        "routing": routing,
+        "intent": career.intent,
+        "structured": career.structured,
+        "prompt_version": career.prompt_version,
+        "model_notices": list(career.notices),
+    }
 
 
 def run_chat_turn(
@@ -136,12 +222,41 @@ def run_chat_turn(
     user_id: str | None = None,
     model_id: str | None = None,
     document_context: str = "",
+    preferences: dict | None = None,
+    job_url: str | None = None,
+    job_text: str | None = None,
+    document_type: str | None = None,
+    template_id: str | None = None,
+    theme_id: str | None = None,
 ) -> dict:
     """Execute one conversation turn and return the rendered payload."""
     text = (user_text or "").strip()
     if not text:
         raise ValueError("Message content is required.")
     chat_store.append_message(session, role="user", content=text)
+
+    # RD-06/RD-08: intent-aware path. ``None`` means "general": the code below runs unchanged.
+    treat_as_plain_text = bool((preferences or {}).get("treat_as_plain_text"))
+    career = (
+        None
+        if treat_as_plain_text
+        else run_career_turn(
+            text,
+            mode=session.mode,
+            language=session.language,
+            user_id=user_id,
+            model_id=model_id,
+            document_context=document_context,
+            preferences=preferences,
+            job_url=job_url,
+            job_text=job_text,
+            session=session,
+            document_type=document_type,
+            template_id=template_id,
+        )
+    )
+    if career is not None:
+        return _career_payload(session, career, model_id)
 
     knowledge_context = ""
     personal_context = ""

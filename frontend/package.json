@@ -8,11 +8,13 @@
     "build": "vite build",
     "preview": "vite preview --host",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "screenshots": "node scripts/screenshots.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.109.0",
     "clsx": "^2.1.1",
+    "embla-carousel-react": "^8.5.2",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "tailwind-merge": "^3.7.0"
@@ -24,6 +26,7 @@
     "@vitejs/plugin-react": "^4.3.1",
     "autoprefixer": "^10.6.1",
     "jsdom": "^29.1.1",
+    "playwright": "^1.64.1",
     "postcss": "^8.5.29",
     "shadcn": "^4.21.4",
     "tailwindcss": "^4.3.3",

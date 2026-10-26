@@ -29,6 +29,7 @@ ENTITY_CV = "cv"
 ENTITY_COVER_LETTER = "cover_letter"
 ENTITY_RESUME_ANALYSIS = "resume_analysis"
 ENTITY_JOB_DESCRIPTION = "job_description"
+ENTITY_TEMPLATE = "template"
 
 ENTITY_TYPES = (
     ENTITY_PROFILE,
@@ -36,6 +37,7 @@ ENTITY_TYPES = (
     ENTITY_COVER_LETTER,
     ENTITY_RESUME_ANALYSIS,
     ENTITY_JOB_DESCRIPTION,
+    ENTITY_TEMPLATE,
 )
 
 
@@ -175,6 +177,37 @@ class SemanticEmbeddingStore:
 
         scored.sort(key=lambda pair: pair[1], reverse=True)
         return scored[:top_k]
+
+    def delete(self, entity_type: str, entity_id_prefix: str, user_id: str) -> int:
+        """Remove one user's embeddings whose ``entity_id`` starts with ``entity_id_prefix``.
+
+        Used to replace the chunks of a re-indexed document so none go stale.
+        Returns the number of local entries removed. Remote deletion is
+        fail-soft, like :meth:`save`.
+        """
+        doomed = [
+            key
+            for key, record in self._entries.items()
+            if key[0] == entity_type and key[1].startswith(entity_id_prefix) and record.get("user_id") == user_id
+        ]
+        for key in doomed:
+            del self._entries[key]
+        if self._supabase_configured:
+            try:
+                with self._client() as client:
+                    response = client.delete(
+                        "/rest/v1/semantic_embeddings",
+                        params={
+                            "entity_type": f"eq.{entity_type}",
+                            "entity_id": f"like.{entity_id_prefix}*",
+                            "user_id": f"eq.{user_id}",
+                        },
+                    )
+                    if response.status_code >= 400:
+                        raise RuntimeError("semantic_embeddings delete failed")
+            except (httpx.HTTPError, RuntimeError):
+                logger.warning("semantic.delete.failed entity_type=%s", entity_type)
+        return len(doomed)
 
     def new_id(self) -> str:
         return str(uuid.uuid4())

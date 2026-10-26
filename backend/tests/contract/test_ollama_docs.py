@@ -98,6 +98,7 @@ class TestDocumentedVariables:
             "OLLAMA_CONNECT_TIMEOUT_SECONDS",
             "OLLAMA_KEEP_ALIVE",
             "OLLAMA_TEMPERATURE",
+            "OLLAMA_NUM_CTX",
             "OLLAMA_IMAGE_TAG",
         ],
     )
@@ -129,6 +130,7 @@ class TestDocumentedVariables:
             ("OLLAMA_CONNECT_TIMEOUT_SECONDS", "3"),
             ("OLLAMA_KEEP_ALIVE", "5m"),
             ("OLLAMA_TEMPERATURE", "0.3"),
+            ("OLLAMA_NUM_CTX", "8192"),
         ):
             assert documented.get(name) == expected, f"{name} documented default drifted"
             assert real.get(name) is not None, f"{name} is not read by config.py"
@@ -139,7 +141,7 @@ class TestDocumentedVariables:
         )
         table = ollama_doc.split("## Environment variables", 1)[-1].split("##", 1)[0]
         documented = dict((n, d.strip()) for n, d in re.findall(r"\| `([A-Z0-9_]+)` \| `?([^`|]*)`? \|", table))
-        for name in ("OLLAMA_MODEL", "OLLAMA_TIMEOUT_SECONDS", "OLLAMA_KEEP_ALIVE"):
+        for name in ("OLLAMA_MODEL", "OLLAMA_TIMEOUT_SECONDS", "OLLAMA_KEEP_ALIVE", "OLLAMA_NUM_CTX"):
             assert example[name] == documented[name], name
         assert example["USE_OLLAMA"] == "true"
         assert example["OLLAMA_IMAGE_TAG"] == "0.40.3"

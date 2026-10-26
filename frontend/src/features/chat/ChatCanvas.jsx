@@ -2,6 +2,10 @@ import React, { useState } from 'react';
 import { useI18n } from '../../i18n';
 import { CheckIcon, CopyIcon, RetryIcon } from '../../components/icons';
 import { BrandMark } from '../../components/brand/BrandMark';
+import { readStructured } from './structuredReader';
+import MatchCard from './MatchCard';
+import ClarifyCard from './ClarifyCard';
+import DocumentPreview from './DocumentPreview';
 
 /**
  * Message renderer.
@@ -201,7 +205,7 @@ function MessageActions({ content, onRetry }) {
  * User turns are rounded bubbles; assistant turns are unboxed serif prose with
  * the brand spark and the Copy / Retry actions underneath.
  */
-export default function ChatCanvas({ messages = [], sending = false, onRetry }) {
+export default function ChatCanvas({ messages = [], sending = false, onRetry, onSendText, session }) {
   const { t } = useI18n();
 
   return (
@@ -248,6 +252,32 @@ export default function ChatCanvas({ messages = [], sending = false, onRetry }) 
               <BrandMark variant="glyph" size={16} className="mr-1 h-4 w-4 text-primary" aria-hidden="true" />
               <MessageActions content={message.content} onRetry={onRetry} />
             </div>
+
+            {(() => {
+              const vm = readStructured(message);
+              if (vm.kind === 'match') {
+                return (
+                  <MatchCard
+                    data={vm}
+                    onTailor={() => onSendText?.(t('chat.quickTailorPrefill'))}
+                    onCover={() => onSendText?.(t('chat.quickCoverPrefill'))}
+                  />
+                );
+              }
+              if (vm.kind === 'document') {
+                return <DocumentPreview data={vm} session={session} />;
+              }
+              if (vm.kind === 'clarify') {
+                return (
+                  <ClarifyCard
+                    data={vm}
+                    onUploadCv={() => {}}
+                    onSubmitJob={(payload) => { if (payload?.job_text) onSendText?.(payload.job_text); else if (payload?.job_url) onSendText?.(payload.job_url); }}
+                  />
+                );
+              }
+              return null;
+            })()}
           </div>
         );
       })}

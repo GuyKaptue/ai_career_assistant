@@ -9,9 +9,9 @@ compatibility with renderers that read additional fields).
 
 from __future__ import annotations
 
-from typing import Any
+from typing import Any, Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 __all__ = [
     "ApplicationPayload",
@@ -123,6 +123,20 @@ class DocumentPayload(_LoosePayload):
     document_type: str | None = None
     template_id: str | None = None
     content: str | None = None
+
+
+class RenderPayload(BaseModel):
+    """Stateless export request: render the given text in a template design; nothing is stored."""
+
+    model_config = ConfigDict(extra="ignore")
+    content: str = Field(min_length=1, max_length=200_000)
+    document_type: Literal["cv", "cover_letter", "resignation"] = "cv"
+    template_id: str = Field(default="", max_length=100)
+    title: str = Field(default="Document", max_length=200)
+    format: Literal["html", "pdf", "docx"] = "pdf"
+    theme_id: str = Field(default="", max_length=60)
+    country: str = Field(default="", max_length=10)
+    sidebar: Literal["", "left", "right"] = ""
 
 
 class ProfilePayload(_LoosePayload):
@@ -250,3 +264,14 @@ class ChatCompletionPayload(_LoosePayload):
     mode: str | None = None
     title: str | None = None
     document_context: str | None = None
+    #: A job posting the user wants to work with: a link to fetch or the pasted text.
+    job_url: str | None = None
+    job_text: str | None = None
+    #: Which document the user is working on ("cv" or "cover_letter").
+    document_type: Literal["cv", "cover_letter"] | None = None
+    #: The template the generated document should use.
+    template_id: str | None = None
+    #: The visual theme of the generated document.
+    theme_id: str | None = None
+    #: Optional job-search preferences from the frontend form (see ``PAYLOAD_FIELD_MAP``).
+    preferences: dict[str, Any] | None = None

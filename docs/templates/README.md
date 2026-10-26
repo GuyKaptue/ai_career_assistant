@@ -10,8 +10,8 @@ architecture, and the Resumaker.ai reference decision.
 |------|-------|
 | [README.md](README.md) | Template system overview and conventions |
 | [resumaker-reference.md](resumaker-reference.md) | T-00 decision: Reactive Resume vs Resumaker.ai |
-| [cv-templates.md](cv-templates.md) | CV template catalog (12 templates) |
-| [cover-letter-templates.md](cover-letter-templates.md) | Cover-letter template catalog (6 templates) |
+| [cv-templates.md](cv-templates.md) | CV template catalog (30 templates) |
+| [cover-letter-templates.md](cover-letter-templates.md) | Cover-letter template catalog (10 templates) |
 | [rendering-architecture.md](rendering-architecture.md) | Rendering pipeline and shared primitives |
 
 ## Template inventory

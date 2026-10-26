@@ -41,4 +41,10 @@ supabase/.env
 
 backend/.env
 frontend/.env.local
-frontend/.env.local
+
+# ---- AI coding-assistant extensions (tooling state, never commit) ----
+.kilo/
+.cursor/
+.windsurf/
+.trae/
+.augment/

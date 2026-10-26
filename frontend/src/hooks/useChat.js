@@ -44,6 +44,10 @@ export function useChat(session) {
 
   // Load messages for the active session.
   useEffect(() => {
+    if (skipLoadRef.current) {
+      skipLoadRef.current = false;
+      return;
+    }
     if (!session || !activeSessionId) {
       setMessages([]);
       return;
@@ -121,10 +125,20 @@ export function useChat(session) {
   );
 
   const abortRef = useRef(null);
+  const skipLoadRef = useRef(false);
 
   const sendMessage = useCallback(
-    async (message, model_id = null, document_context = '') => {
+    async (message, model_id = null, options = {}) => {
       if (!session) return null;
+      const {
+        document_context = '',
+        job_url,
+        job_text,
+        document_type,
+        template_id,
+        theme_id,
+        preferences,
+      } = options || {};
       const optimistic = {
         id: `local-${Date.now()}`,
         role: 'user',
@@ -139,8 +153,14 @@ export function useChat(session) {
       abortRef.current = controller;
 
       try {
-        const body = { message, model_id, document_context };
-        if (activeSessionId) body.session_id = activeSessionId;
+       const body = { message, model_id, document_context };
+       if (job_url) body.job_url = job_url;
+       if (job_text) body.job_text = job_text;
+       if (document_type) body.document_type = document_type;
+       if (template_id) body.template_id = template_id;
+       if (theme_id) body.theme_id = theme_id;
+       if (preferences) body.preferences = preferences;
+       if (activeSessionId) body.session_id = activeSessionId;
         const data = await apiRequestWithSignal('/api/v1/chat/completions', {
           method: 'POST',
           session,
@@ -149,6 +169,7 @@ export function useChat(session) {
         });
         // A new session may have been created server-side; track it.
         if (data?.session?.id && data.session.id !== activeSessionId) {
+          skipLoadRef.current = true;
           setActiveSessionId(data.session.id);
           setSessions((prev) => {
             if (prev.some((s) => s.id === data.session.id)) return prev;
@@ -156,7 +177,10 @@ export function useChat(session) {
           });
         }
         if (data?.message) {
-          setMessages((prev) => [...prev, data.message]);
+          const assistant = { ...data.message };
+          if (data.structured !== undefined) assistant.structured = data.structured;
+          if (data.intent !== undefined) assistant.intent = data.intent;
+          setMessages((prev) => [...prev, assistant]);
         }
         return data;
       } catch (err) {
