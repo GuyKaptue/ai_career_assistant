@@ -57,6 +57,14 @@ class ChatSession:
     created_at: str = ""
     updated_at: str = ""
     messages: list[ChatMessage] = field(default_factory=list)
+    #: The last job this thread worked on, persisted on the session row
+    #: (``chat_sessions.job_context``). It holds the posting text but never CV
+    #: text, and it is deleted with the session. Never part of ``to_dict()``,
+    #: so it is never sent to the browser.
+    job_context: dict | None = field(default=None, repr=False)
+    #: In-memory cache of the same context. The persisted row is the source of
+    #: truth; this only avoids a round-trip inside one process.
+    session_job: dict | None = field(default=None, repr=False)
 
     def to_dict(self, *, include_messages: bool = True) -> dict:
         payload: dict[str, object] = {
@@ -71,7 +79,7 @@ class ChatSession:
             "message_count": len(self.messages),
         }
         if include_messages:
-            payload["messages"] = [message.to_dict() for message in self.messages]
+            payload["messages"] = [m.to_dict() for m in self.messages]
         return payload
 
 

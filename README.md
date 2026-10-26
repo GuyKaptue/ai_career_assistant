@@ -9,12 +9,12 @@
 [![Hugging Face](https://img.shields.io/badge/HF-inference+hub-yellow.svg)](https://huggingface.co/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
-[![CI](https://github.com/GuyKaptue/ai-career-assistant/actions/workflows/ci.yml/badge.svg)](https://github.com/GuyKaptue/ai-career-assistant/actions/workflows/ci.yml)
-[![GitHub release](https://img.shields.io/github/release/GuyKaptue/ai-career-assistant.svg)](https://github.com/GuyKaptue/ai-career-assistant/releases/)
-[![GitHub last commit](https://img.shields.io/github/last-commit/GuyKaptue/ai-career-assistant.svg)](https://github.com/GuyKaptue/ai-career-assistant/commits/main)
-[![GitHub stars](https://img.shields.io/github/stars/GuyKaptue/ai-career-assistant.svg)](https://github.com/GuyKaptue/ai-career-assistant/stargazers)
-[![GitHub forks](https://img.shields.io/github/forks/GuyKaptue/ai-career-assistant.svg)](https://github.com/GuyKaptue/ai-career-assistant/network)
-[![GitHub issues](https://img.shields.io/github/issues/GuyKaptue/ai-career-assistant.svg)](https://github.com/GuyKaptue/ai-career-assistant/issues)
+[![CI](https://github.com/GuyKaptue/ai_career_assistant/actions/workflows/ci.yml/badge.svg)](https://github.com/GuyKaptue/ai_career_assistant/actions/workflows/ci.yml)
+[![GitHub release](https://img.shields.io/github/release/GuyKaptue/ai_career_assistant.svg)](https://github.com/GuyKaptue/ai_career_assistant/releases/)
+[![GitHub last commit](https://img.shields.io/github/last-commit/GuyKaptue/ai_career_assistant.svg)](https://github.com/GuyKaptue/ai_career_assistant/commits/main)
+[![GitHub stars](https://img.shields.io/github/stars/GuyKaptue/ai_career_assistant.svg)](https://github.com/GuyKaptue/ai_career_assistant/stargazers)
+[![GitHub forks](https://img.shields.io/github/forks/GuyKaptue/ai_career_assistant.svg)](https://github.com/GuyKaptue/ai_career_assistant/network)
+[![GitHub issues](https://img.shields.io/github/issues/GuyKaptue/ai_career_assistant.svg)](https://github.com/GuyKaptue/ai_career_assistant/issues)
 [![Documentation](https://img.shields.io/badge/docs-passing-brightgreen.svg)](./docs/)
 [![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.XXXXXX.svg)](https://doi.org/10.5281/zenodo.XXXXXX)
 
@@ -30,15 +30,42 @@ application — without relying on closed tools or paid subscription layers. All
 AI features degrade gracefully to deterministic, offline-safe fallbacks so the
 system keeps working without network access or paid inference credits.
 
+## App tour
+
+![Animated tour of the AI Career Assistant: job match card, tailored CV with export, unreadable-link help, dark mode and mobile layout](docs/images/app-tour.gif)
+
+<sub>Synthetic data only. Regenerate the screenshots and the tour as described
+under [Screenshots](#screenshots).</sub>
+
 ![System architecture](docs/images/system_architecture.png)
 
 ## Features
 
+### Career chat with job flows (production-ready)
+
+- **Paste a job link or the job text** and ask "does my CV match this job?". The
+  assistant reads the posting (SSRF-safe fetcher), scores it in code and shows a
+  **match card**: score 0-100, matched and missing skills, plain-language reasons
+- **One click to tailor your CV or write a cover letter** for that job. Every
+  statement is checked against your CV (skills, employers, numbers); anything
+  unverifiable is removed and counted. Edit the draft, then export as PDF, DOCX
+  or HTML
+- **Clear help when a link cannot be read** (login wall, not a job posting,
+  too large, unsupported type): the assistant says why and asks for the text
+- The chat remembers the job for the rest of the session, so "now write the
+  cover letter" works without pasting it again
+- English, German and French, light and dark theme, keyboard accessible
+
 ### Document generation (production-ready)
 
 - **CV, cover-letter, and resignation generation** from structured inputs with
-  19 templates (12 CV, 6 cover-letter, 1 resignation), multi-locale support
+  41 templates (30 CV, 10 cover-letter, 1 resignation), multi-locale support
   (EN/DE/FR), and live template preview
+- **Design system** — 20 colour themes (contrast-checked for WCAG AA), country
+  profiles (DACH, France and South Europe, UK and US, Nordics and Netherlands),
+  left or right sidebar, and a stateless render endpoint
+  (`POST /api/v1/documents/render`) that turns an edited draft into PDF, DOCX
+  or HTML without storing it
 - **Local-first inference** — `make ollama-up` + `make ollama-pull` runs a
   local [Ollama](docs/deployment/ollama.md) server with no API key and no
   billing; an optional `use_ai: true` flag routes through it, then Hugging Face
@@ -128,8 +155,8 @@ talks to the backend API (and optionally to Supabase directly for auth).
 ### 1. Clone and configure
 
 ```bash
-git clone https://github.com/GuyKaptue/ai-career-assistant.git
-cd ai-career-assistant
+git clone https://github.com/GuyKaptue/ai_career_assistant.git
+cd ai_career_assistant
 cp .env.example .env
 ```
 
@@ -158,7 +185,15 @@ supabase db status # or: make db-status
 ```
 
 Migrations live in `supabase/migrations/` (schema, document versioning,
-knowledge base, semantic embeddings, personal document retrieval).
+knowledge base, semantic embeddings, personal document retrieval, chat,
+multi-model chat, application job links, new-user trigger).
+
+The career-chat and template features add SQL files in `backend/migrations/`
+(`rd08_*.sql`: user core and templates, analysis and job search, semantic
+template entity, chat session job context, projects). They are applied by hand
+in the Supabase SQL editor, in numeric order. The chat still answers if the
+`chat_sessions.job_context` column is missing, but the remembered job then
+lives in memory only.
 
 ### 3. Backend
 
@@ -194,9 +229,35 @@ unavailable.
 
 ### Web UI
 
-Open <http://localhost:5173>. The app provides: sign-in, template gallery with
-live preview, document studio (create/edit/version/export), resume checker, job
+Open <http://localhost:5173>. The app provides: sign-in, the career chat (job
+match, tailored CV, cover letter), template gallery and carousel with live
+preview, document studio (create/edit/version/export), resume checker, job
 discovery, and the Kanban application tracker.
+
+### Screenshots
+
+| Match card | Tailored CV and export |
+|---|---|
+| ![Match card](docs/images/in-laptop-chat.png) | ![Tailored CV](docs/images/final-laptop.png) |
+
+| Link could not be read, then a match | Dark mode | Mobile |
+|---|---|---|
+| ![Clarify then match](docs/images/combo-chat.png) | ![Dark mode](docs/images/combo-dark.png) | ![Mobile](docs/images/combo-mobile.png) |
+
+All screenshots use synthetic data (no real account, CV or job). To regenerate
+them and the animated tour:
+
+```bash
+cd frontend
+npm install
+npm run screenshots            # writes ../docs/images/*.png
+cd .. && pip install pillow && python scripts/make_app_tour.py   # docs/images/app-tour.gif
+```
+
+The script builds the app with placeholder environment values, mocks every
+network call and never touches a real backend or database. If Playwright's
+browser is not installed, run `npx playwright install chromium` or set
+`CHROMIUM_PATH` to a Chromium binary.
 
 ### CLI
 
@@ -238,37 +299,65 @@ Full API documentation is served at `http://localhost:8000/docs` (OpenAPI/Swagge
 ## Project structure
 
 ```
-ai-career-assistant/
-├── backend/                  # FastAPI application (Python)
+ai_career_assistant/
+├── backend/                       # FastAPI application (Python)
 │   ├── app/
-│   │   ├── api/              # HTTP layer: routes + Pydantic schemas
-│   │   ├── application/      # use-case orchestration (services)
-│   │   ├── domain/           # domain models, registries, provider adapters
-│   │   ├── infrastructure/   # AI prompts, knowledge stores, DOCX export
-│   │   ├── core/             # config, errors, security, middleware, persistence
-│   │   ├── cli.py            # real CLI (config/db/server/jobs/documents/health)
-│   │   └── main.py           # FastAPI composition root
-│   ├── tests/                # unit / integration / api / security / contract
-│   └── pyproject.toml        # packaging + tool config (ruff, mypy, pytest)
-├── frontend/                 # React 18 + Vite SPA
-│   └── src/
-│       ├── features/         # auth, documents, resume-checker, jobs, tracker
-│       ├── components/       # AsyncStates, AuthGuard, StatusBanner
-│       ├── hooks/            # useSession, useAsync, useStatus, useTemplates, ...
-│       ├── lib/              # api client, supabase client
-│       └── i18n/             # en / de / fr
-├── supabase/migrations/      # SQL migrations (schema → RAG tables)
-├── docker/                   # Dockerfile.backend, Dockerfile.frontend
-├── docs/                     # architecture, requirements, privacy, academic, ...
-│   ├── diagrams/             # editable Graphviz sources
-│   └── images/               # rendered architecture diagrams (PNG)
-├── .github/workflows/ci.yml  # CI: lint, typecheck, tests, security gates
-├── docker-compose.yml
-├── Makefile                  # install/test/lint/typecheck/db/docker targets
-├── .env.example              # configuration template (no secrets)
-├── pyproject metadata        # backend/pyproject.toml (PEP 621)
-├── CITATION.cff
-└── LICENSE (MIT)
+│   │   ├── api/                   # HTTP layer
+│   │   │   ├── routes/            # chat, documents, positions, applications,
+│   │   │   │                      # profiles, knowledge, projects, health
+│   │   │   └── schemas.py         # request/response models
+│   │   ├── application/
+│   │   │   └── services/          # use cases: chat_service, career_assistant,
+│   │   │                          # career_intent, chat_input, job_resolution,
+│   │   │                          # job_target, tailoring_pipeline,
+│   │   │                          # job_search_pipeline, candidate_analysis,
+│   │   │                          # rag_enrichment, model router, ATS, ...
+│   │   ├── domain/                # models: chat, documents, templates, cv,
+│   │   │                          # cover_letters, jobs, positions, projects,
+│   │   │                          # users, knowledge, resume_analysis,
+│   │   │                          # applications
+│   │   ├── infrastructure/
+│   │   │   ├── ai/                # Ollama adapter, prompts
+│   │   │   ├── document_export/   # PDF/DOCX/HTML renderers, previews
+│   │   │   ├── job_providers/     # Remotive, Arbeitnow, Adzuna, Arbeitsagentur
+│   │   │   └── knowledge/         # embeddings, knowledge and semantic stores
+│   │   ├── core/                  # config, errors, security, middleware,
+│   │   │                          # observability, persistence
+│   │   ├── cli.py, cli_ai.py      # command line
+│   │   └── main.py                # FastAPI composition root
+│   ├── migrations/                # rd08_*.sql (applied by hand, see below)
+│   ├── tests/                     # unit / integration / api / security / contract
+│   │   └── fixtures/              # synthetic test data only
+│   ├── requirements.txt
+│   └── pyproject.toml             # packaging + tool config (ruff, mypy, pytest)
+├── frontend/                      # React 18 + Vite SPA
+│   ├── src/
+│   │   ├── features/              # chat, documents, jobs, tracker,
+│   │   │                          # resume-checker, auth
+│   │   ├── pages/                 # Documents, Jobs, Tracker, Resume checker
+│   │   ├── components/            # app shell, dialogs, ui primitives, brand
+│   │   ├── hooks/                 # useChat, useSession, useTemplates, ...
+│   │   ├── lib/                   # API client, Supabase client
+│   │   └── i18n/                  # en / de / fr
+│   ├── scripts/screenshots.mjs    # generates docs/images/*.png
+│   └── public/                    # icons, manifest
+├── supabase/migrations/           # SQL migrations (schema -> chat -> triggers)
+├── docker/                        # Dockerfile.backend, Dockerfile.frontend
+├── scripts/                       # apply_db_migrations.sh, make_app_tour.py, diagram animation
+├── docs/
+│   ├── architecture/              # career-intents, template-system
+│   ├── templates/                 # catalog and rendering architecture
+│   ├── deployment/, security/, api/, ai/, audit/, development/, privacy/,
+│   │   requirements/, academic/, legal/, debugging/
+│   ├── diagrams/                  # editable Graphviz sources
+│   ├── theme_samples/             # theme and country-profile samples
+│   └── images/                    # architecture diagrams, screenshots, app-tour.gif
+├── .github/workflows/ci.yml       # CI: lint, typecheck, tests, security gates
+├── docker-compose.yml, docker-compose.gpu.yml
+├── Makefile                       # install/test/lint/typecheck/db/docker targets
+├── .env.example                   # configuration template (no secrets)
+├── CITATION.cff, CONTRIBUTING.md, LICENSE (MIT), LICENSES.md
+└── README.md
 ```
 
 ## Testing and quality assurance
@@ -291,11 +380,12 @@ Frontend:
 cd frontend
 npm test             # Vitest + React Testing Library (jsdom)
 npm run build        # production build
+npm run screenshots  # regenerate docs/images/*.png (synthetic data)
 ```
 
-Current status: **backend 404 passed / 1 skipped**, **frontend 144 passed**,
-`ruff`/`mypy`/`bandit` clean, coverage ≈ 77% (network and live-DB paths are
-covered by live integration tests, not unit tests, by design).
+Current status: **backend 1729 passed / 1 skipped**, **frontend 244 passed**,
+`ruff`/`mypy`/`bandit` clean (network and live-DB paths are covered by live
+integration tests, not unit tests, by design).
 
 ## Security and configuration
 
@@ -332,6 +422,8 @@ Contributions are welcome. Conventions:
 
 - `docs/` — documentation index
 - `docs/architecture/` — architecture decisions and system design
+- `docs/architecture/career-intents.md` — the intent-aware chat pipeline (RD-06/RD-08)
+- `docs/architecture/template-system.md` — templates, themes, country profiles, rendering
 - `docs/requirements/` — requirements, traceability matrix, implementation roadmap
 - `docs/privacy/data-flow.md` — data flow, AI transmission table, GDPR rights
 - `docs/academic/` — system, mathematical, ATS, and evaluation methodology

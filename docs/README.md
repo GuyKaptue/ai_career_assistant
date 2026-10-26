@@ -9,7 +9,7 @@ The documentation is written as a working project guide rather than as a collect
 | Area | Contents |
 |------|----------|
 | `requirements/` | product requirements, traceability matrix, implementation roadmap |
-| `architecture/` | architecture decisions and system design |
+| `architecture/` | architecture decisions, system design and the career-intent pipeline |
 | `api/` | API documentation |
 | `security/` | security model and controls |
 | `privacy/` | data flow, AI transmission table, GDPR rights |
@@ -19,10 +19,20 @@ The documentation is written as a working project guide rather than as a collect
 | `development/` | developer guides |
 | `legal/` | licensing and legal notices |
 
+## Feature documents
+
+| Document | Covers |
+|----------|--------|
+| `architecture/career-intents.md` | the intent-aware chat pipeline (RD-06/RD-08): intent detection, job ingestion, the verified job target, the turns, the session job context, the fallbacks and the privacy rules |
+| `deployment/ollama.md` | the local-inference chain (Ollama → Hugging Face → template) and its operator guide |
+| `audit/ollama-integration.md` | the RD-01 audit of the local-inference integration |
+| `ai/model-catalog.md` | the model catalog, the licensing policy and the routing profiles |
+
 ## Architecture diagrams
 
 Editable Graphviz sources live in `docs/diagrams/`; rendered PNGs live in
-`docs/images/` and are embedded in the root `README.md`.
+`docs/images/` and are embedded in the root `README.md`. A full catalog of
+every image (diagrams and UI screenshots) is in `docs/images/README.md`.
 
 | Diagram | Source | Image |
 |---------|--------|-------|

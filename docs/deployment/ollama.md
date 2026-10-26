@@ -118,6 +118,7 @@ All defaults are read from `backend/app/core/config.py` and
 | `OLLAMA_CONNECT_TIMEOUT_SECONDS` | `3` | Connect timeout, also the whole-request budget for the readiness probe. | `> 0` | backend |
 | `OLLAMA_KEEP_ALIVE` | `5m` | How long Ollama keeps the model in memory after a call. | Ollama duration string | backend |
 | `OLLAMA_TEMPERATURE` | `0.3` | Sampling temperature for career tasks. | `0.0` – `2.0` | backend |
+| `OLLAMA_NUM_CTX` | `8192` | Context window (tokens) requested per call. Clamped once at startup against the real context length the model reports via `/api/show` (the configured value is the ceiling; a failed lookup keeps it unchanged). | integer ≥ `512` | backend |
 | `OLLAMA_IMAGE_TAG` | `0.40.3` | Pinned image tag. Never `latest`: a silent image bump must not change behaviour. | pinned semver | compose |
 
 ## GPU

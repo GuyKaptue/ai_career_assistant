@@ -256,7 +256,7 @@ class TestDocumentRetrieval:
 class TestHandleNewUserTrigger:
     """Validate the handle_new_user trigger migration.
 
-    PROJECT_GUIDE.md documents an auto-create-profile trigger, but it was
+    The project guide documented an auto-create-profile trigger, but it was
     never created by any migration: Supabase signups produced auth.users
     rows with no public.profiles row ("signed up but no user record").
     This pins the migration that creates it.

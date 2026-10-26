@@ -30,6 +30,7 @@ CONFIG_OLLAMA_KEYS = (
     "OLLAMA_CONNECT_TIMEOUT_SECONDS",
     "OLLAMA_KEEP_ALIVE",
     "OLLAMA_TEMPERATURE",
+    "OLLAMA_NUM_CTX",
 )
 
 #: Variables forwarded by the backend service, with the default each source uses.
@@ -40,6 +41,7 @@ EXPECTED_DEFAULTS = {
     "OLLAMA_CONNECT_TIMEOUT_SECONDS": "3",
     "OLLAMA_KEEP_ALIVE": "5m",
     "OLLAMA_TEMPERATURE": "0.3",
+    "OLLAMA_NUM_CTX": "8192",
     "OLLAMA_IMAGE_TAG": "0.40.3",
 }
 
@@ -186,6 +188,7 @@ class TestBackendService:
             "OLLAMA_TIMEOUT_SECONDS",
             "OLLAMA_CONNECT_TIMEOUT_SECONDS",
             "OLLAMA_TEMPERATURE",
+            "OLLAMA_NUM_CTX",
         }
         for key in (
             "OLLAMA_MODEL",
@@ -193,6 +196,7 @@ class TestBackendService:
             "OLLAMA_CONNECT_TIMEOUT_SECONDS",
             "OLLAMA_KEEP_ALIVE",
             "OLLAMA_TEMPERATURE",
+            "OLLAMA_NUM_CTX",
         ):
             # ``os.getenv("KEY", <default>)``, optionally wrapped in a parser
             # call such as ``parse_float_setting(os.getenv("KEY"), 120.0, ...)``

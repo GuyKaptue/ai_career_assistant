@@ -9,6 +9,7 @@ from app.application.services import chat_store as chat_store_module
 from app.application.services import document_store as document_store_module
 from app.application.services import project_store as project_store_module
 from app.application.services import shared_router as shared_router_module
+from app.application.services import template_service as template_service_module
 from app.core.config import AppSettings, settings
 from app.core.security import auth
 from app.infrastructure.knowledge import knowledge_store as knowledge_store_module
@@ -92,6 +93,7 @@ def isolate_stores_in_memory(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(semantic_store_module, "settings", memory_settings)
     monkeypatch.setattr(chat_store_module, "settings", memory_settings)
     monkeypatch.setattr(project_store_module, "settings", memory_settings)
+    monkeypatch.setattr(template_service_module, "settings", memory_settings)
 
     for store in (
         profile_service.profile_store,

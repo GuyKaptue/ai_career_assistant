@@ -41,6 +41,7 @@ services:
       OLLAMA_CONNECT_TIMEOUT_SECONDS: ${OLLAMA_CONNECT_TIMEOUT_SECONDS:-3}
       OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:-5m}
       OLLAMA_TEMPERATURE: ${OLLAMA_TEMPERATURE:-0.3}
+      OLLAMA_NUM_CTX: ${OLLAMA_NUM_CTX:-8192}
     ports:
       - "8000:8000"
     # Backend has no hard startup env validation, so a missing credential won't

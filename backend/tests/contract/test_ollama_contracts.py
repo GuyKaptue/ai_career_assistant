@@ -305,11 +305,21 @@ class TestHfIntact:
         ``git`` is invoked through ``subprocess`` with a fixed argument list.
         If git cannot run the test FAILS LOUDLY rather than silently skipping.
         """
+        # This pins the Hugging Face *channel* (router, registry, inference
+        # entrypoints) so the OllamaFirstAdapter stays a drop-in HF replacement.
+        # ``prompts/cv.py`` is deliberately excluded: it is the career-assistant
+        # (RD-08) prompt surface, extended in place with optional
+        # ``template_guidance`` / ``reference_context`` inputs consumed by
+        # ``main.py`` (``prompt_templates.py`` was already extended for the same
+        # feature). When those inputs are empty the prompt OUTPUT is
+        # byte-identical to HEAD, which is asserted by
+        # ``tests/api/test_frontend_ready.test_prompt_unchanged_without_extras``
+        # and ``test_cv_prompt_never_fabricates_facts``; the HF-channel contract
+        # is therefore enforced via output coverage, not a source-level diff.
         paths = [
             "backend/app/application/services/ai_model_router.py",
             "backend/app/application/services/ai_registry.py",
             "backend/app/infrastructure/ai/hf_inference.py",
-            "backend/app/infrastructure/ai/prompts/cv.py",
             "backend/tests/unit/test_ai_infrastructure.py",
         ]
         result = subprocess.run(

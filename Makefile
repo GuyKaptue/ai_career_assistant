@@ -8,7 +8,8 @@ PIP_AUDIT ?= $(PYTHON) -m pip_audit
 UVICORN ?= $(PYTHON) -m uvicorn
 SUPABASE ?= supabase
 
-.PHONY: install install-dev format format-check lint lint-fix typecheck test test-unit test-integration test-api test-security test-e2e coverage security licenses validate backend-test frontend-build frontend-dev app dev docker-build docker-up docker-down docker-logs ollama-up ollama-pull ollama-logs ollama-gpu-up verify check-env db-migrate db-reset db-status clean backend frontend
+screenshots:
+	cd frontend && node scripts/screenshots.mjs: install install-dev format format-check lint lint-fix typecheck test test-unit test-integration test-api test-security test-e2e coverage security licenses validate backend-test frontend-build frontend-dev app dev docker-build docker-up docker-down docker-logs ollama-up ollama-pull ollama-logs ollama-gpu-up verify check-env db-migrate db-reset db-status clean backend frontend
 
 check-env:
 	cd backend && PYTHONPATH=. $(PYTHON) -c "from app.core.config import validate_runtime_environment; validate_runtime_environment(); print('Environment configuration looks valid.')"

@@ -8,8 +8,8 @@ from app.main import app
 client = TestClient(app)
 
 FIXTURES = Path(__file__).resolve().parents[1] / "fixtures"
-EN_CV = FIXTURES / "Guy K. CV.pdf"
-DE_CV = FIXTURES / "Guy kaptue Lebenslauf.pdf"
+EN_CV = FIXTURES / "synthetic_cv_en.pdf"
+DE_CV = FIXTURES / "synthetic_cv_de.pdf"
 
 
 def test_health_endpoint():
@@ -437,27 +437,27 @@ class TestResumeExtractUpload:
         with EN_CV.open("rb") as handle:
             response = client.post(
                 "/api/v1/resume/extract",
-                files={"file": ("Guy K. CV.pdf", handle, "application/pdf")},
+                files={"file": ("synthetic_cv_en.pdf", handle, "application/pdf")},
             )
 
         assert response.status_code == 200
         payload = response.json()
-        assert payload["filename"] == "Guy K. CV.pdf"
+        assert payload["filename"] == "synthetic_cv_en.pdf"
         assert payload["pages"] >= 1
         assert payload["chars"] > 3000
-        assert "Kaptue" in payload["text"]
+        assert "Sample Candidate" in payload["text"]
         assert "Python" in payload["text"]
 
     def test_extract_german_cv(self):
         with DE_CV.open("rb") as handle:
             response = client.post(
                 "/api/v1/resume/extract",
-                files={"file": ("Guy kaptue Lebenslauf.pdf", handle, "application/pdf")},
+                files={"file": ("synthetic_cv_de.pdf", handle, "application/pdf")},
             )
 
         assert response.status_code == 200
         payload = response.json()
-        assert "Kaptue" in payload["text"]
+        assert "Sample Candidate" in payload["text"]
         assert "Zusammenfassung" in payload["text"]
 
     def test_extract_feeds_resume_check(self):
@@ -465,7 +465,7 @@ class TestResumeExtractUpload:
         with EN_CV.open("rb") as handle:
             extracted = client.post(
                 "/api/v1/resume/extract",
-                files={"file": ("Guy K. CV.pdf", handle, "application/pdf")},
+                files={"file": ("synthetic_cv_en.pdf", handle, "application/pdf")},
             ).json()
 
         check = client.post(

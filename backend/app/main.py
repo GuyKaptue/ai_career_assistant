@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import Depends, FastAPI, File, Query, UploadFile
+from fastapi import Depends, FastAPI, File, Query, Response, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import ValidationError
 
@@ -33,12 +33,18 @@ from app.application.services.document_generation import (
     generate_resignation_letter_document,
 )
 from app.application.services.document_retrieval import get_document_retrieval
+from app.application.services.generation_context import (
+    personal_context_for_generation,
+    reference_context,
+    resolve_template,
+)
 from app.application.services.knowledge_base import get_knowledge_base
 from app.application.services.semantic_matching import (
     check_resume_semantic,
     semantic_matching,
 )
 from app.application.services.shared_router import get_adapter, get_router, log_routing_decision
+from app.application.services.template_service import get_template_service
 from app.core.config import settings
 from app.core.errors import (
     AIProviderError,
@@ -53,6 +59,12 @@ from app.core.errors import (
 from app.core.middleware import RateLimitMiddleware, RequestLoggingMiddleware, SecurityHeadersMiddleware
 from app.core.observability import configure_logging
 from app.core.security.dependencies import get_optional_user
+from app.domain.documents.country_profiles import (
+    apply_photo_policy,
+    paper_for,
+    profile_for_country,
+    section_labels,
+)
 from app.domain.documents.schemas import (
     CoverLetterGenerationRequest,
     CoverLetterGenerationResult,
@@ -62,7 +74,9 @@ from app.domain.documents.schemas import (
 from app.domain.jobs.providers import JobSearchOptions
 from app.domain.jobs.service import JobSearchFailed, search_jobs
 from app.domain.templates.template_registry import TemplateRegistry
+from app.domain.templates.themes import FONTS, THEMES, contrast_report
 from app.infrastructure.ai.prompts.cv import build_cover_letter_prompt, build_cv_prompt
+from app.infrastructure.document_export.previews import SAMPLE_FORMATS, render_sample
 
 logger = logging.getLogger(__name__)
 
@@ -130,22 +144,116 @@ app.add_middleware(
 
 
 @app.get("/api/v1/templates", tags=["templates"])
-def list_templates(document_type: str | None = None) -> dict:
+def list_templates(
+    document_type: str | None = None,
+    current_user: dict | None = Depends(get_optional_user),
+) -> dict:
+    """Built-in templates (additive ``type``/``layout``/``color_scheme``/``source``) plus,
+    for authenticated callers, their own templates. Existing fields are unchanged."""
     registry = TemplateRegistry()
     templates = registry.list_templates(document_type=document_type)
+    items: list[dict] = [
+        {
+            "id": template.id,
+            "name": template.name,
+            "document_type": template.document_type,
+            "type": template.document_type,
+            "description": template.description,
+            "supported_locales": list(template.supported_locales),
+            "layout": template.metadata.get("layout"),
+            "color_scheme": template.metadata.get("color_scheme"),
+            "columns": int(template.metadata.get("columns", 1)),
+            "sidebar": template.metadata.get("sidebar"),
+            "sidebar_pct": template.metadata.get("sidebar_pct"),
+            "theme_id": template.metadata.get("theme_id"),
+            "source": "builtin",
+        }
+        for template in templates
+    ]
+    if current_user is not None:
+        for own in get_template_service().list_templates(current_user["sub"], document_type):
+            base = registry.get(own.base_template_id, own.kind) if own.base_template_id else None
+            items.append(
+                {
+                    "id": own.id,
+                    "name": own.name,
+                    "document_type": own.kind,
+                    "type": own.kind,
+                    "description": own.structure_type or "",
+                    "supported_locales": list(base.supported_locales) if base else ["en", "de", "fr"],
+                    "layout": base.metadata.get("layout") if base else None,
+                    "color_scheme": base.metadata.get("color_scheme") if base else None,
+                    "columns": int(base.metadata.get("columns", 1)) if base else 1,
+                    "sidebar": base.metadata.get("sidebar") if base else None,
+                    "sidebar_pct": base.metadata.get("sidebar_pct") if base else None,
+                    "theme_id": base.metadata.get("theme_id") if base else None,
+                    "source": "user",
+                }
+            )
+    return {"count": len(items), "items": items}
+
+
+@app.get("/api/v1/themes", tags=["templates"])
+def list_themes() -> dict:
+    """The 20 selectable colour themes, with their WCAG AA contrast report."""
+    items = [{**t.to_dict(), "contrast": contrast_report(t)} for t in THEMES.values()]
+    return {"count": len(items), "items": items, "fonts": list(FONTS)}
+
+
+@app.get("/api/v1/country-profiles", tags=["templates"])
+def country_profile(country: str, language: str | None = None, has_photo: bool = False) -> dict:
+    """CV and cover-letter conventions for the employer's country (decided in code)."""
+    profile = profile_for_country(country, language)
+    _, caveats = apply_photo_policy(profile, has_photo)
+    locale = language if language in ("en", "de", "fr") else (profile.language if profile.language != "match" else "en")
     return {
-        "count": len(templates),
-        "items": [
-            {
-                "id": template.id,
-                "name": template.name,
-                "document_type": template.document_type,
-                "description": template.description,
-                "supported_locales": list(template.supported_locales),
-            }
-            for template in templates
-        ],
+        **profile.to_dict(country.upper()),
+        "paper_size": paper_for(country, profile),
+        "section_labels": section_labels(profile, locale),
+        "caveats": caveats,
     }
+
+
+@app.get("/api/v1/templates/{template_id}/sample", tags=["templates"], response_model=None)
+def template_sample(
+    template_id: str,
+    document_type: str = "cv",
+    locale: str = "en",
+    format: str = "png",
+    theme_id: str = "",
+    country: str = "",
+    sidebar: str = "",
+) -> Response:
+    """Synthetic sample of one built-in template as png, pdf, docx or html (no user data).
+
+    Uses the same theme as document export, so a gallery thumbnail matches the download.
+    """
+    template = TemplateRegistry().get(template_id, document_type)
+    if template is None:
+        raise AppValidationError(f"Template '{template_id}' is not available for document type '{document_type}'.")
+    if locale not in template.supported_locales:
+        raise AppValidationError(f"Template '{template_id}' does not support locale '{locale}'.")
+    if format not in SAMPLE_FORMATS:
+        raise AppValidationError("Unsupported format. Use png, pdf, docx, or html.")
+    if theme_id and theme_id not in THEMES:
+        raise AppValidationError(f"Unknown theme '{theme_id}'.")
+    if sidebar not in ("", "left", "right"):
+        raise AppValidationError("sidebar must be 'left' or 'right'.")
+    data = render_sample(
+        template.id,
+        document_type,
+        locale,
+        format,
+        tuple(sorted((k, str(v)) for k, v in template.metadata.items())),
+        theme_id,
+        country.upper(),
+        sidebar,
+    )
+    return Response(
+        content=data,
+        media_type=SAMPLE_FORMATS[format],
+        headers={"Cache-Control": "public, max-age=3600"},
+    )
 
 
 @app.post("/api/v1/templates/preview", tags=["templates"])
@@ -321,17 +429,19 @@ def generate_cv(
     # RD-05: personalize with the user's own documents
     # when authenticated. Anonymous requests skip
     # retrieval (empty context).
-    personal_context = ""
-    if current_user is not None:
-        personal_context = get_document_retrieval().retrieve_for_generation(
-            user_id=current_user["sub"],
-            query=f"{request.target_role} {request.summary}",
-        )["context"]
+    user_id = current_user["sub"] if current_user is not None else None
+    resolved = resolve_template(user_id, request.template_id, "cv")
+    personal_context = personal_context_for_generation(
+        user_id,
+        f"{request.target_role} {request.summary}",
+        resolved.selected_id if resolved else request.template_id,
+        get_document_retrieval(),
+    )
 
     try:
         base = generate_cv_document(
             payload,
-            template_id=request.template_id,
+            template_id=resolved.render_template_id if resolved else request.template_id,
             knowledge_context=knowledge_context,
             personal_context=personal_context,
         )
@@ -356,6 +466,8 @@ def generate_cv(
         request.education,
         request.skills,
         request.language,
+        template_guidance=resolved.guidance if resolved else "",
+        reference_context=reference_context(knowledge_context, personal_context),
     )
     adapter = get_adapter()
     try:
@@ -444,17 +556,19 @@ def generate_cover_letter(
     # RD-05: personalize with the user's own documents
     # when authenticated. Anonymous requests skip
     # retrieval (empty context).
-    personal_context = ""
-    if current_user is not None:
-        personal_context = get_document_retrieval().retrieve_for_generation(
-            user_id=current_user["sub"],
-            query=f"{request.target_role} {request.company} {request.summary}",
-        )["context"]
+    user_id = current_user["sub"] if current_user is not None else None
+    resolved = resolve_template(user_id, request.template_id, "cover_letter")
+    personal_context = personal_context_for_generation(
+        user_id,
+        f"{request.target_role} {request.company} {request.summary}",
+        resolved.selected_id if resolved else request.template_id,
+        get_document_retrieval(),
+    )
 
     try:
         base = generate_cover_letter_document(
             payload,
-            template_id=request.template_id,
+            template_id=resolved.render_template_id if resolved else request.template_id,
             knowledge_context=knowledge_context,
             personal_context=personal_context,
         )
@@ -472,7 +586,13 @@ def generate_cover_letter(
         return result.model_dump()
 
     prompt = build_cover_letter_prompt(
-        request.name, request.company, request.target_role, request.summary, request.language
+        request.name,
+        request.company,
+        request.target_role,
+        request.summary,
+        request.language,
+        template_guidance=resolved.guidance if resolved else "",
+        reference_context=reference_context(knowledge_context, personal_context),
     )
     adapter = get_adapter()
     try:

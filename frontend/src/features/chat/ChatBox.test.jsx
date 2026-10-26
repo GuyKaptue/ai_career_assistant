@@ -123,7 +123,7 @@ describe('ChatBox composer functionality', () => {
 
     fireEvent.change(textarea(), { target: { value: 'Pin my model' } });
     fireEvent.click(sendButton());
-    await waitFor(() => expect(onSendMessage).toHaveBeenCalledWith('Pin my model', 'microsoft/phi-4'));
+    await waitFor(() => expect(onSendMessage).toHaveBeenCalledWith('Pin my model', 'microsoft/phi-4', expect.any(Object)));
   });
 
   it('keeps sending "auto" (null) when the picker was never touched', async () => {
@@ -131,7 +131,7 @@ describe('ChatBox composer functionality', () => {
 
     fireEvent.change(textarea(), { target: { value: 'Auto route me' } });
     fireEvent.click(sendButton());
-    await waitFor(() => expect(onSendMessage).toHaveBeenCalledWith('Auto route me', null));
+    await waitFor(() => expect(onSendMessage).toHaveBeenCalledWith('Auto route me', null, expect.any(Object)));
     expect(readSelection()).toBe(AUTO_MODEL);
   });
 
@@ -186,7 +186,7 @@ describe('ChatBox composer functionality', () => {
     fireEvent.click(sendButton());
 
     await waitFor(() => expect(screen.getByTestId('dialog')).toBeInTheDocument());
-    expect(onSendMessage).toHaveBeenCalledWith('Hi as a guest', null);
+    expect(onSendMessage).toHaveBeenCalledWith('Hi as a guest', null, expect.any(Object));
     expect(textarea()).toHaveValue('Hi as a guest');
   });
 });

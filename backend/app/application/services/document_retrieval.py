@@ -48,6 +48,8 @@ MAX_RETRIEVAL_CONTEXT_CHARS = 3000
 
 # Document types eligible for personal retrieval.
 DOCUMENT_ENTITY_TYPES = ("cv", "cover_letter", "resume_analysis")
+# RD-08: also indexable (per user) but not exposed through the documents route.
+RAG_EXTRA_ENTITY_TYPES = ("template", "job_description")
 
 
 def chunk_text(
@@ -111,14 +113,18 @@ class DocumentRetrievalService:
         so retrieval is auditable back to the
         originating document.
         """
-        if document_type not in DOCUMENT_ENTITY_TYPES:
-            raise ValidationError(f"document_type must be one of: " f"{', '.join(DOCUMENT_ENTITY_TYPES)}")
+        if document_type not in DOCUMENT_ENTITY_TYPES + RAG_EXTRA_ENTITY_TYPES:
+            raise ValidationError(
+                f"document_type must be one of: {', '.join(DOCUMENT_ENTITY_TYPES + RAG_EXTRA_ENTITY_TYPES)}"
+            )
         if not str(user_id).strip():
             raise ValidationError("user_id is required.")
         if not str(document_id).strip():
             raise ValidationError("document_id is required.")
 
         chunks = chunk_text(content)
+        # Re-indexing replaces the previous chunks so none go stale.
+        self.store.delete(document_type, f"{document_id}:chunk-", user_id)
         for index, chunk in enumerate(chunks):
             self.store.save(
                 entity_type=document_type,
@@ -135,6 +141,10 @@ class DocumentRetrievalService:
             "user_id": user_id,
             "chunks": len(chunks),
         }
+
+    def remove_document(self, user_id: str, document_type: str, document_id: str) -> int:
+        """Delete all indexed chunks of one document (user-scoped). Returns local chunks removed."""
+        return self.store.delete(document_type, f"{document_id}:chunk-", user_id)
 
     def retrieve(
         self,

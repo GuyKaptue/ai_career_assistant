@@ -1,9 +1,9 @@
 # AI Career Assistant — TODO List
 
-> **Last updated:** 2026-10-10 (all spec items Done: AI-01…AI-11, BE-01…BE-08, T-00…T-06, FE-01…FE-04, CLI-01, TEST-01/02, CI-01, MAKE-01, HYG-01…03, PRIV-01, DOC-01/02/03, RD-03/04/05, Phase-16 audit + CV-upload/extract + debug-print follow-up + CHAT-01…CHAT-05 AI Chat Platform (Claude/Gemini-style sessions, model picker, artifacts) + CHAT-06 chat UI audit/fixes (build-breaking syntax error, unimported components, ChatBox props refactor, JobDiscovery contract/pagination/a11y, test mocks) + StatusBanner removed from the default chat page + fully responsive/dynamic multi-platform chat shell + CHAT-07 borderless elevation (all white borders/lines removed from every surface incl. CSS, section dividers and form controls; replaced by a full layered `@theme` shadow scale + a recessed `--shadow-recessed` inset for text fields; conversation box and message bubbles rounded with shadow; welcome message verified in en/de/fr; `t()` gained string-fallback support) + CHAT-08 runtime fixes (`select` null-value warning, welcome paragraph min-content width trap, actionable shadow project tiles wired to session modes) + CHAT-09 tailwind-merge shadow-token fix (`extendTailwindMerge` taught the custom `@theme` shadow scale, which was silently swallowing the suggested-prompt card shadows in favour of the Button variant's `shadow-xs`) + CHAT-10 fluid typography (all `--text-*` tokens converted to `clamp()` for continuous scaling across 320-1920px; welcome description now a rounded shadow panel; added `.text-description`/`.text-display`; remaining fixed sizes replaced except the intentional 16px iOS-zoom guard) + CHAT-14 UI pass (found that dialog animations were no-ops because `tailwindcss-animate` is not installed — added real keyframes instead; rebuilt `ui/dialog` as an accessible modal with focus trap, Esc, aria-modal, scroll lock, focus restore and fade+scale; auth dialog is now one dialog with an ARIA tab pair, labelled fields, inline validation, spinner + disabled-while-pending and reset-on-close; Settings is now a dialog with Workspaces/Appearance/AI Models/Account where theme is a radiogroup and the model picker defaults to Auto; composer gained a live char/token counter, IME-safe Enter handling, and a Stop button backed by AbortController + abortable apiRequestWithSignal) + CHAT-13 multi-model chat (verified 10-model pool with per-model HF card licences and live chat-router compatibility probing — only 5 of 10 are chat-capable, 2 of those licence-eligible; `inference_provider_supported` now filters unsupported models out of auto-selection with reason `not_supported_by_provider`; robust system-prompt contracts — strict JSON for analysis, validated markdown for generation, with named-violation repair/retry and a contract-derived deterministic fallback; Auto-selection is the picker default and per-message routing audit is stored in `chat_messages.routing`; fixed a silent data-loss bug where a stale column fell back to in-memory writes) + CHAT-12 frontend/backend connectivity + navigation (root cause was a CORS port mismatch: Vite fell back to 5174 while the backend allowlisted 5173/4173/3000 — fixed with a Vite `/api` dev proxy, a relative API base, and `127.0.0.1` + fallback ports in the CORS defaults; **every dropdown in the app was inert** because Trigger and Content kept separate `open` state — lifted into shared context; App rendered only Chat so the four other workspaces were unreachable and the chat page was a dead end — added `useView` routing, `SettingsMenu`, `WorkspaceShell` with back-to-chat, and four page wrappers; consolidated auth into ONE shared dialog via `useAuthDialog`; project tiles wired to the six DB chat modes with `ChatStore` validating them against the SQL CHECK constraint; removed 12 duplicated i18n keys across en/de/fr) + CHAT-11 crash fixes from dev-server console (incomplete `ThemeContext` default crashed provider-less `useTheme` consumers; unguarded `window.matchMedia` in the default `'system'` theme effect; added `components/ChatLayout.test.jsx` rendering the real Chat->ChatLayout->Sidebar tree, which is what let the wiring ReferenceErrors escape) — backend 404 passed, frontend 135 passed, backend 476 passed, `vite build` clean; **ACTION REQUIRED: the 7 Supabase migrations have never been applied — `./scripts/apply_db_migrations.sh`
-> **Sources:** `PROJECT_DESCRIBTION.md`, `MASTER_IMPLEMANTATION_PROMPT.md`, `PROJECT_GUIDE.md`, `DYNAMIC_HF_PROMPT.md`, `TEMPLATE_PROMPT.md`, `docs/requirements/*`
+> **Last updated:** 2026-10-26. Spec items Done: AI-01…AI-11, BE-01…BE-08, T-00…T-06, FE-01…FE-04, CLI-01, TEST-01/02, CI-01, MAKE-01, HYG-01…03, PRIV-01, DOC-01/02, RD-01, RD-03/04/05, and the chat job flows (CJ-01…CJ-10 — see §6b).
+> **Sources:** `PROJECT_DESCRIBTION.md`, `TODO.md`, `README.md`, `docs/requirements/*`, `docs/architecture/*`. The original requirement set also came from three **external** specification documents (`MASTER_IMPLEMENTATION_PROMPT.md`, `DYNAMIC_HF_PROMPT.md`, `TEMPLATE_PROMPT.md`) that are **not** part of this repository; `docs/requirements/traceability-matrix.md` records what was derived from them.
 > **How to update:** when an item is finished (code + tests + docs), flip its Status from `⬜ Todo` to `✅ Done` and update `Last updated`. Statuses: `✅ Done` | `🚧 In progress` | `⬜ Todo` | `⏸ Deferred`.
-> **Health (2026-10-10):** backend `404 passed, 1 skipped` + `ruff check`/`ruff format --check` clean + `mypy` clean on 78 source files + `bandit` 0 issues; frontend `135 passed` (Vitest, 20 files); backend `476 passed` + `vite build` clean. Backend tests in `backend/tests/{unit,integration,api,security,contract}`; frontend tests in `frontend/src/**/*.test.{js,jsx}`. Chat audit: `docs/audit/chat-ui-audit.md`.
+> **Health:** the current state is the one recorded in `docs/requirements/traceability-matrix.md` § "Verification addendum". Reproduce it with `make verify` (backend lint, typecheck, tests) and `cd frontend && npm test && npm run build`.
 
 ## 1. Foundations, Storage, API, Core Logic — DONE
 
@@ -51,9 +51,9 @@
 |----|------|--------|----------|
 | T-00 | DECISION: Reactive Resume (MIT) vs Resumaker.ai (reference-only) as template base — blocks T-01…T-08 | ✅ Done | decided 2026-10-07: Reactive code base + Resumaker inspiration; `template-system.md`, `third-party-assets.md` |
 | T-01 | Full template model (version, layout/typography/color/section defs, compatibility) + per-template renderers (no generic shell) | ✅ Done | §3, §4 | cover_letter_docx.py, template_registry.py, document_generation.py |
-| T-02 | `docs/templates/{README,resumaker-reference,cv-templates,cover-letter-templates,rendering-architecture}.md` | ✅ Done | `docs/templates/` — README.md, resumaker-reference.md, cv-templates.md (12 CV), cover-letter-templates.md (6 letters), rendering-architecture.md |
+| T-02 | `docs/templates/{README,resumaker-reference,cv-templates,cover-letter-templates,rendering-architecture}.md` | ✅ Done | `docs/templates/` — README.md, resumaker-reference.md, cv-templates.md (30 CV), cover-letter-templates.md (10 letters), rendering-architecture.md |
 | T-03 | Template preview endpoint + pagination/unicode/DE/FR/EN tests + visual-regression strategy | ✅ Done | `POST /api/v1/templates/preview` (TemplatePreviewPayload, locale/template validation, 400 on business-rule failure); `tests/test_api.py` (4 preview tests: CV/cover/resignation render, unknown template, unsupported locale) |
-| T-04 | 12+ CV templates + multi cover-letter templates (currently 6 total / 1 letter) | ✅ Done | `template_registry.py` — 19 templates (12 CV + 6 cover-letter + 1 resignation); `tests/test_template_registry.py` |
+| T-04 | 12+ CV templates + multi cover-letter templates (currently 30 total / 10 letters) | ✅ Done | `template_registry.py` — 41 templates (30 CV + 10 cover-letter + 1 resignation); `tests/test_template_registry.py` |
 | T-05 | Shared design primitives, no duplicated rendering, no hard-coded user content | ✅ Done | §22 | cover_letter_docx.py (MARGIN_*, FONT_*, RULE_COLOR constants) |
 | T-06 | Per-template READMEs + licensing/attribution (`third-party-assets.md` verified) | ✅ Done | per-template catalog consolidated in `docs/templates/cv-templates.md` + `cover-letter-templates.md`; `third-party-assets.md` verified; `LICENSES.md` audited |
 
@@ -106,6 +106,43 @@
 | RD-07 | GPU acceleration verified on real NVIDIA hardware | ⬜ Open | docs/deployment/ollama.md#gpu |
 | RD-08 | Per-user quotas and rate limits on generation | ⬜ Open | docs/deployment/ollama.md |
 | RD-09 | Prompt caching for repeated analysis tasks | ⬜ Open | docs/deployment/ollama.md |
+
+## 6b. Chat Job Flows — Intent-Aware Career Assistant (RD-06 / RD-08) — DONE
+
+> **The problem:** a user uploads a CV and writes *"please use this cv to help me search a
+> corresponding jobs for me"*. The assistant answered with a paraphrase of the CV in the generic
+> **Summary / Steps / Caveats** layout, because every chat message used the same output contract.
+>
+> **The rule:** the LLM extracts and phrases; **code decides, validates and grounds**. The CV is
+> data, never the instruction. The intent is detected from the **message only**.
+>
+> Design and pipeline: `docs/architecture/career-intents.md`.
+>
+> **Naming note:** the "RD-06 / RD-08" in this section title is the
+> intent-aware career assistant (this section). It is **not** the RD sequence of
+> §6 above, where **RD-06 … RD-09** are the Ollama follow-ups (model picker,
+> GPU, quotas, prompt caching). This section is therefore tracked as
+> **CJ-01…CJ-10**.
+
+| ID | Item | Status | Evidence |
+|----|------|--------|----------|
+| CJ-01 | Intent model (`search_jobs`, `summarize_cv`, `improve_cv`, `skill_gap`, `interview_prep`, `cover_letter`, `match_job`, `tailor_cv`, `clarify`, `general`) with multilingual rule tables, explicit precedence and no LLM call | ✅ Done | `app/application/services/career_intent.py`; `tests/unit/test_career_intent.py` |
+| CJ-02 | Per-intent compact prompts: the CV is a delimited data block, the request is the task, the answer is one JSON object, `prompt_version` per intent | ✅ Done | `app/application/services/career_prompts.py`; `tests/unit/test_career_prompts.py` |
+| CJ-03 | Job ingestion from a URL or a pasted posting: SSRF-safe fetch, no OCR, two-signal rule, JSON-LD trust, the CV veto, typed statuses | ✅ Done | `app/application/services/job_resolution.py`; `tests/unit/test_job_resolution.py` |
+| CJ-04 | Verified `JobTarget`: deterministic first pass, one `job_extraction` call only when the title or the company is missing, grounding in code, dropped company, `the role` fallback, structural limits | ✅ Done | `app/application/services/job_target.py`; `tests/unit/test_job_target.py` |
+| CJ-05 | Chat routing: `match_job`, `tailor_cv`, `cover_letter` turns, the two-pipeline turn, the code-only match score, the safe `structured.job` summary | ✅ Done | `app/application/services/career_assistant.py`; `tests/api/test_chat_job_flows.py` |
+| CJ-06 | Preconditions: a missing CV or job produces a clarifying turn with `structured.missing` and **no model call**; an unreadable page produces `structured.job_ingest_status` and HTTP 200 | ✅ Done | `tests/api/test_chat_job_flows.py` |
+| CJ-07 | Session memory: `chat_sessions.job_context` (title, company, location, employment type, skills, url, source host, posting text ≤ 30 000 chars, `text_hash`, flags); never CV text; deleted with the session; never sent to the browser | ✅ Done (migration applied 2026-10-26 via `supabase db query`) | `backend/migrations/rd08_004_chat_session_job_context.sql`; `app/application/services/chat_store.py`; `tests/unit/test_chat_store_job_context.py` |
+| CJ-08 | Routing audit: `intent`, `rule_id`, `input_kind`, `job_ingest_status`, `source_host`, `text_len`, `job_len` — ids and counts only, never content | ✅ Done | `app/application/services/chat_service.py`; `tests/api/test_chat_job_flows.py` |
+| CJ-09 | The `general` path stays byte-identical (characterization test) | ✅ Done | `tests/api/test_chat_general_characterization.py` |
+| CJ-10 | Frontend rendering of `structured` (match card, document preview, the flags) | ✅ Done | `frontend/src/features/chat/ChatCanvas.jsx`; `MatchCard.jsx`; `ClarifyCard.jsx`; `DocumentPreview.jsx`; `structuredReader.js`; `ChatCanvasStructured.test.jsx` |
+
+> **Live evidence (2026-10-21, docker compose stack, Ollama up):** `POST /api/v1/chat/completions`
+> with a pasted posting returns `intent=match_job`, `rule_id=match_job`, `score=70/100`,
+> `structured.job = {title, company, source_host, company_unverified, the_role_fallback}` and an
+> on-intent answer ("You already have: Python", "The job asks for: docker, kafka, postgresql").
+> A follow-up turn ("now write the cover letter") reuses the job from the session
+> (`used_session_job=true`). No error in the backend, frontend or Ollama logs.
 
 ## 7. Future Roadmap — RAG & Semantic AI Architectural Enhancements — DONE
 

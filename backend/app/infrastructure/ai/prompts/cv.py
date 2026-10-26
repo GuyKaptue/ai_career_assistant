@@ -6,7 +6,20 @@ skills. If a metric is not provided, omit it — do not fabricate one.
 
 from __future__ import annotations
 
+from app.infrastructure.ai.prompt_templates import reference_context_block
+
 PROMPT_VERSION = "v1"
+
+
+def _extras(template_guidance: str, reference_context: str) -> str:
+    """Optional template guidance and reference block; empty (byte-identical prompt) when unused."""
+    out = ""
+    if template_guidance.strip():
+        out += f"TEMPLATE GUIDANCE (follow this structure and tone): {template_guidance.strip()}\n"
+    block = reference_context_block(reference_context)
+    if block:
+        out += "\n".join(block[1:]) + "\n"
+    return out
 
 
 def build_cv_prompt(
@@ -17,6 +30,9 @@ def build_cv_prompt(
     education: list[dict],
     skills: list[str],
     language: str = "en",
+    *,
+    template_guidance: str = "",
+    reference_context: str = "",
 ) -> str:
     exp_lines = []
     for job in experience[:6]:
@@ -32,18 +48,29 @@ def build_cv_prompt(
         "Experience:\n" + ("\n".join(exp_lines) if exp_lines else "Not provided.") + "\n"
         "Education:\n" + ("\n".join(edu_lines) if edu_lines else "Not provided.") + "\n"
         f"Skills: {', '.join(skills) if skills else 'Not provided.'}\n"
-        "STRICT RULES: Use ONLY the facts above. Do NOT invent job titles, companies, "
+        + _extras(template_guidance, reference_context)
+        + "STRICT RULES: Use ONLY the facts above. Do NOT invent job titles, companies, "
         "dates, metrics, certifications, or skills. If information is missing, write "
         "'Not provided' instead of guessing. Output plain text with sections: "
         "Summary, Experience, Education, Skills."
     )
 
 
-def build_cover_letter_prompt(name: str, company: str, target_role: str, summary: str, language: str = "en") -> str:
+def build_cover_letter_prompt(
+    name: str,
+    company: str,
+    target_role: str,
+    summary: str,
+    language: str = "en",
+    *,
+    template_guidance: str = "",
+    reference_context: str = "",
+) -> str:
     return (
         f"Write a concise professional cover letter from {name} to {company} "
         f"for the '{target_role}' role (language: {language}).\n"
         f"Candidate background: {summary or 'Not provided.'}\n"
-        "STRICT RULES: Use ONLY the facts above. Do NOT invent achievements, "
+        + _extras(template_guidance, reference_context)
+        + "STRICT RULES: Use ONLY the facts above. Do NOT invent achievements, "
         "metrics, or employment history. Keep it under 250 words. Plain text."
     )

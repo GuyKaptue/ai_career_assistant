@@ -10,6 +10,7 @@ Privacy: prompts and completions are never logged or placed in metrics.
 from __future__ import annotations
 
 import logging
+import threading
 import time
 from collections.abc import Sequence
 from typing import Any, Final, Protocol
@@ -53,6 +54,32 @@ _BREAKER_FAILURE_CLASSES: Final = frozenset({MODEL_UNAVAILABLE, TIMEOUT, RATE_LI
 _CIRCUIT_OPEN_REASON: Final = f"{MODEL_UNAVAILABLE}: ollama circuit breaker open"
 
 
+def _context_length_from(body: object) -> int | None:
+    """Pull the model's context length out of an ``/api/show`` response (F1).
+
+    Accepts the documented shape (``model_info`` keys such as
+    ``llama.context_length``) plus the older top-level ``context_length``.
+    Any unexpected shape returns ``None`` so the caller keeps the configured
+    value. Pure; never raises.
+    """
+    if not isinstance(body, dict):
+        return None
+    model_info = body.get("model_info")
+    if isinstance(model_info, dict):
+        for key, value in model_info.items():
+            if (
+                str(key).endswith("context_length")
+                and isinstance(value, int)
+                and not isinstance(value, bool)
+                and value > 0
+            ):
+                return value
+    fallback = body.get("context_length")
+    if isinstance(fallback, int) and not isinstance(fallback, bool) and fallback > 0:
+        return fallback
+    return None
+
+
 class GenerationAdapter(Protocol):
     """Slice of the HF adapter API that application code depends on."""
 
@@ -86,6 +113,10 @@ class OllamaFirstAdapter:
             failure_threshold=_BREAKER_FAILURE_THRESHOLD,
             reset_timeout=_BREAKER_RECOVERY_SECONDS,
         )
+        # F1: effective num_ctx, resolved once per adapter (configured window
+        # clamped to the model's real context length) and reused afterwards.
+        self._num_ctx_cache: int | None = None
+        self._num_ctx_lock = threading.Lock()
 
     @property
     def ollama_model_id(self) -> str:
@@ -171,7 +202,7 @@ class OllamaFirstAdapter:
             outcome = self._ollama.chat(
                 messages,
                 max_new_tokens=token_budget,
-                num_ctx=token_budget,
+                num_ctx=self._resolve_num_ctx(),
             )
         except AIProviderError as exc:
             failure_class = classify_failure(exc)
@@ -184,6 +215,54 @@ class OllamaFirstAdapter:
 
         self._breaker.mark_success()
         return self._to_result(outcome, token_budget), None
+
+    def _resolve_num_ctx(self) -> int:
+        """Effective ``num_ctx`` for this adapter (finding F1).
+
+        The configured ``settings.ollama_num_ctx`` clamped (cached after the first successful lookup)
+        against the context length the running model actually reports via
+        ``POST /api/show``. Later requests read the cache and never touch the
+        network. Never raises: when the lookup fails, the configured value is
+        used unchanged.
+        """
+        with self._num_ctx_lock:
+            if self._num_ctx_cache is not None:
+                return self._num_ctx_cache
+            configured = settings.ollama_num_ctx
+            reported = self._fetch_model_context_length()
+            if reported is None:
+                # Lookup failed: use the configured value now but do NOT cache
+                # it, so the next request retries once Ollama is reachable.
+                return configured
+            self._num_ctx_cache = min(configured, reported)
+            return self._num_ctx_cache
+
+    def _fetch_model_context_length(self) -> int | None:
+        """One-shot ``POST /api/show`` lookup of the model's context length (F1).
+
+        Returns ``None`` whenever the answer is not usable — server down, stub
+        client, non-200, unexpected body — so the configured value wins by
+        default. Never raises; the response is reduced to an integer and
+        nothing from it (nor the base URL) is ever logged.
+        """
+        try:
+            response = self._ollama._client.post(
+                f"{self._ollama._base_url}/api/show",
+                # ``model`` is the documented key (Ollama >= 0.40); ``name`` is
+                # the legacy alias, sent too so older servers answer as well.
+                json={"model": self._ollama.model, "name": self._ollama.model},
+                timeout=self._ollama._connect_timeout,
+            )
+        except Exception:
+            # Deliberately no exception detail: it could carry the base URL.
+            logger.debug("ai.ollama.context_length_lookup_failed")
+            return None
+        if response.status_code != 200:
+            return None
+        try:
+            return _context_length_from(response.json())
+        except ValueError:
+            return None
 
     def _to_result(self, outcome: OllamaResult, token_budget: int) -> dict:
         model_id = f"{OLLAMA_MODEL_ID_PREFIX}{outcome.model}"

@@ -8,6 +8,7 @@ import { apiUpload } from '../../lib/api';
 import { debugLog } from '../../lib/debug';
 import ChatCanvas from './ChatCanvas';
 import PromptBox from './PromptBox';
+import { detectJobUrl, detectJobText, quickActions } from './inputHints';
 import ArtifactPanel from './ArtifactPanel';
 import { useAuthDialog } from '../../hooks/useAuthDialog';
 import { Button } from '../../components/ui/button';
@@ -88,7 +89,10 @@ export default function ChatBox({
   const [attachment, setAttachment] = useState(null);
   const [attaching, setAttaching] = useState(false);
   const [showLoginPrompt, setShowLoginPrompt] = useState(false);
-  const [dismissedArtifactKey, setDismissedArtifactKey] = useState(null);
+  const [treatAsPlainText, setTreatAsPlainText] = useState(false);
+
+  const jobUrlDetected = !treatAsPlainText && detectJobUrl(input);
+  const jobTextDetected = !treatAsPlainText && detectJobText(input);
 
   const threadRef = useRef(null);
   const inputRef = useRef(null);
@@ -155,9 +159,13 @@ export default function ChatBox({
     try {
       // 'auto' means "let the router pick per task" — send no model_id so the
       // backend's auto-selection runs instead of pinning a literal model.
-      const preferredModel = selectedModel === AUTO_MODEL ? null : selectedModel;
-      const result = await onSendMessage?.(message, preferredModel);
-      if (!result) {
+       const preferredModel = selectedModel === AUTO_MODEL ? null : selectedModel;
+       const result = await onSendMessage?.(message, preferredModel, {
+         document_context: attachment?.text || '',
+         preferences: treatAsPlainText ? { treat_as_plain_text: true } : undefined,
+       });
+       setTreatAsPlainText(false);
+       if (!result) {
         if (activeUser) {
           report(t('chat.unableToSend'), error || t('chat.retryLater'));
         } else {
@@ -245,7 +253,7 @@ export default function ChatBox({
           aria-busy={sending}
         >
           <div className="chat-thread mx-auto w-full max-w-3xl">
-            {hasMessages && <ChatCanvas messages={renderedMessages} sending={sending} onRetry={handleRetry} />}
+            {hasMessages && <ChatCanvas messages={renderedMessages} sending={sending} onRetry={handleRetry} onSendText={sendText} session={activeUser} />}
             {!hasMessages && loading && (
               <p className="text-center text-sm text-muted-foreground" role="status">
                 {t('chat.loadingHistory', 'Loading conversation…')}
@@ -291,6 +299,40 @@ export default function ChatBox({
               <p className="mb-2 rounded-xl bg-destructive/10 px-4 py-2 text-center text-sm text-destructive" role="alert">
                 {error}
               </p>
+            )}
+
+            {/* Detection chips */}
+            {(jobUrlDetected || jobTextDetected) && (
+              <div className="mb-2 flex flex-wrap gap-2" role="status" aria-live="polite">
+                {jobUrlDetected && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-accent px-3 py-1 text-xs">
+                    {t('chat.jobLinkDetected')}
+                    <button type="button" aria-label={t('chat.dismissChip')} onClick={() => setTreatAsPlainText(true)}>✕</button>
+                  </span>
+                )}
+                {jobTextDetected && (
+                  <span className="inline-flex items-center gap-1 rounded-full bg-accent px-3 py-1 text-xs">
+                    {t('chat.jobDescriptionDetected')}
+                    <button type="button" aria-label={t('chat.dismissChip')} onClick={() => setTreatAsPlainText(true)}>✕</button>
+                  </span>
+                )}
+              </div>
+            )}
+
+            {/* CV status */}
+            <div className="mb-2 text-xs text-muted-foreground">
+              {attachment ? `${t('chat.cvAttached')}: ${attachment.name}` : t('chat.noCvAttached')}
+            </div>
+
+            {/* Quick actions */}
+            {!hasMessages && (
+              <div className="mb-2 flex flex-wrap gap-2">
+                {quickActions().map((qa) => (
+                  <button key={qa.key} type="button" className="rounded-full border px-3 py-1 text-xs hover:bg-accent" onClick={() => setInput(t(qa.prefillKey))}>
+                    {t(qa.labelKey)}
+                  </button>
+                ))}
+              </div>
             )}
 
             <div className="rounded-2xl border border-border bg-card p-2.5 shadow-soft transition-shadow focus-within:shadow-medium sm:p-3">

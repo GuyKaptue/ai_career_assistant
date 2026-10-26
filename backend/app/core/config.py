@@ -152,6 +152,7 @@ class AppSettings:
     ollama_connect_timeout_seconds: float = 3.0  # fast fail so HF fallback stays snappy
     ollama_keep_alive: str = "5m"  # how long Ollama keeps the model loaded
     ollama_temperature: float = 0.3  # low for factual career documents
+    ollama_num_ctx: int = 8192  # context window (tokens) per Ollama call (F1)
 
     @classmethod
     def from_env(cls) -> "AppSettings":
@@ -187,6 +188,7 @@ class AppSettings:
             ),
             ollama_keep_alive=(os.getenv("OLLAMA_KEEP_ALIVE", "5m") or "").strip() or "5m",
             ollama_temperature=parse_float_setting(os.getenv("OLLAMA_TEMPERATURE"), 0.3),
+            ollama_num_ctx=parse_int_setting(os.getenv("OLLAMA_NUM_CTX"), 8192, minimum=512),
         )
 
 

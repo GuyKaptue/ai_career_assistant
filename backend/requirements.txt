@@ -12,7 +12,7 @@ cryptography==50.0.2
 python-multipart==0.0.31
 huggingface_hub==0.34.3
 pydantic==2.11.7
-pypdf==6.19.0
+pypdf==6.21.2
 reportlab==4.4.4
 python-docx==1.2.0
 PyYAML==6.0.1
@@ -22,7 +22,7 @@ PyYAML==6.0.1
 # image stays slim. huggingface_hub does not pin tokenizers, and the app imports
 # it lazily with an estimator fallback, so this bump is safe.
 tokenizers==0.21.4
-Pillow==12.3.0
+Pillow==13.0.0
 pytest==9.0.3
 pytest-cov==5.0.0
 ruff==0.7.3

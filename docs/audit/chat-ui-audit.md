@@ -3,6 +3,8 @@
 Date: 2026-10-10 | Scope: frontend chat + backend model/chat routes
 Status: **Implemented and verified** — 404 backend tests, 53 frontend tests, clean production build.
 
+> **Historical snapshot (2026-10-10).** This audit is a point-in-time record of the chat UI and the backend chat/model routes as they existed on the audit date. The test counts above (404 backend, 53 frontend) and every finding below are preserved verbatim and are **not** refreshed by later work. For the current, verified status see the [traceability matrix](../requirements/traceability-matrix.md).
+
 ## 1. Existing architecture
 
 **Backend (fully implemented, tested):**

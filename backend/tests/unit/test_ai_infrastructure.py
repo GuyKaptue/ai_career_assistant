@@ -230,7 +230,7 @@ def test_rate_limited_failure_is_retried_with_bounded_backoff(
 
 
 def test_extract_resume_text_from_real_pdf() -> None:
-    pdf_path = Path(__file__).resolve().parents[1] / "fixtures" / "Guy K. CV.pdf"
+    pdf_path = Path(__file__).resolve().parents[1] / "fixtures" / "synthetic_cv_en.pdf"
     text = extract_resume_text_from_pdf(pdf_path)
 
     assert "Data Scientist" in text
@@ -241,34 +241,34 @@ def test_extract_resume_text_from_real_pdf() -> None:
 class TestRealCvExtraction:
     """Extraction against the two real CVs in tests/fixtures/.
 
-    These are the user's own documents (`Guy K. CV.pdf`, English;
-    `Guy kaptue Lebenslauf.pdf`, German) and double as the manual
+    These are the user's own documents (`synthetic_cv_en.pdf`, English;
+    `synthetic_cv_de.pdf`, German) and double as the manual
     "upload CV → ATS check / job search" fixtures: upload either file
     through the ATS-review or job-search CV button and the extracted
     text below is what should fill the form / re-rank results.
     Debug via the `cv_pdf_extractor` logger (path, pages, chars).
     """
 
-    EN_CV = Path(__file__).resolve().parents[1] / "fixtures" / "Guy K. CV.pdf"
-    DE_CV = Path(__file__).resolve().parents[1] / "fixtures" / "Guy kaptue Lebenslauf.pdf"
+    EN_CV = Path(__file__).resolve().parents[1] / "fixtures" / "synthetic_cv_en.pdf"
+    DE_CV = Path(__file__).resolve().parents[1] / "fixtures" / "synthetic_cv_de.pdf"
 
     def test_english_cv_extracts_expected_profile(self) -> None:
         text = extract_resume_text_from_pdf(self.EN_CV)
         assert len(text) > 3000
-        for marker in ("Kaptue", "Data Scientist", "Python", "SQL", "Machine Learning"):
+        for marker in ("Sample Candidate", "Data Scientist", "Python", "SQL", "Machine Learning"):
             assert marker in text
 
     def test_german_cv_extracts_expected_profile(self) -> None:
         text = extract_resume_text_from_pdf(self.DE_CV)
         assert len(text) > 3000
-        for marker in ("Kaptue", "Data Scientist", "Python", "Zusammenfassung", "Projekte"):
+        for marker in ("Sample Candidate", "Data Scientist", "Python", "Zusammenfassung", "Projekte"):
             assert marker in text
 
     def test_both_cvs_share_owner_identity(self) -> None:
         english = extract_resume_text_from_pdf(self.EN_CV)
         german = extract_resume_text_from_pdf(self.DE_CV)
-        assert "Kaptue" in english and "Kaptue" in german
-        assert "Winsen" in english and "Winsen" in german
+        assert "Sample Candidate" in english and "Sample Candidate" in german
+        assert "Sample City" in english and "Sample City" in german
 
     def test_bytes_path_matches_file_path(self) -> None:
         """The upload endpoint reads bytes, not paths — both must agree."""

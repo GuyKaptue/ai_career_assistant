@@ -7,11 +7,14 @@ annotated, and never let a schema failure trip the circuit breaker.
 from __future__ import annotations
 
 import concurrent.futures
+import json
 
+import httpx
 import pytest
 from ollama_helpers import (
     FakeHfAdapter,
     FakeOllamaServer,
+    FixedJitter,
     RecordingClock,
     RecordingSleep,
     connect_refused,
@@ -377,7 +380,10 @@ class TestSystemPrompt:
             {"role": "user", "content": PROMPT},
         ]
 
-    def test_num_ctx_and_num_predict_match_the_budget(self, monkeypatch):
+    def test_num_ctx_comes_from_config_and_num_predict_from_the_budget(self, monkeypatch):
+        # F1: num_ctx is the configured context window (never the request's
+        # token budget); num_predict still mirrors the budget, so output-length
+        # behaviour is unchanged.
         enable_ollama(monkeypatch)
         server = FakeOllamaServer()
         wrapper = make_wrapper(server)
@@ -385,8 +391,108 @@ class TestSystemPrompt:
         wrapper.generate_with_fallback(TASK, PROMPT, token_budget=BUDGET)
 
         options = server.last_chat_payload()["options"]
-        assert options["num_ctx"] == BUDGET
+        assert options["num_ctx"] == first_module.settings.ollama_num_ctx
         assert options["num_predict"] == BUDGET
+
+
+# ---------------------------------------------------------------------------
+# F1: num_ctx = configured window, clamped once against POST /api/show
+# ---------------------------------------------------------------------------
+class TestNumCtxContextWindow:
+    """The request's token budget no longer decides num_ctx (finding F1)."""
+
+    @staticmethod
+    def _wrapper_with_show(server: FakeOllamaServer, show_response, show_calls: list):
+        """A wrapper whose Ollama client also answers ``POST /api/show``."""
+        from app.infrastructure.ai.ollama_adapter import OllamaInferenceAdapter
+
+        inner = server.transport()
+
+        def handler(request: httpx.Request) -> httpx.Response:
+            if request.url.path.endswith("/api/show"):
+                show_calls.append(request)
+                if isinstance(show_response, BaseException):
+                    raise show_response
+                return show_response
+            return inner.handle_request(request)
+
+        adapter = OllamaInferenceAdapter(
+            base_url="http://ollama.test:11434",
+            client=httpx.Client(transport=httpx.MockTransport(handler)),
+            sleep=RecordingSleep(),
+            jitter=FixedJitter(),
+        )
+        return first_module.OllamaFirstAdapter(FakeHfAdapter(), adapter)
+
+    def test_configured_window_is_sent_when_the_lookup_fails(self, monkeypatch):
+        # The fake server 404s unknown paths, so the /api/show lookup fails and
+        # the configured value must be used unchanged.
+        enable_ollama(monkeypatch, ollama_num_ctx=4096)
+        server = FakeOllamaServer()
+        wrapper = make_wrapper(server)
+
+        wrapper.generate_with_fallback(TASK, PROMPT, token_budget=BUDGET)
+
+        options = server.last_chat_payload()["options"]
+        assert options["num_ctx"] == 4096
+        assert options["num_predict"] == BUDGET
+
+    @pytest.mark.parametrize(
+        ("reported", "expected"),
+        [(2048, 2048), (262144, 8192)],
+        ids=["smaller_real_window_clamps_down", "larger_real_window_keeps_configured_ceiling"],
+    )
+    def test_num_ctx_is_clamped_to_the_real_window_but_never_inflated(self, monkeypatch, reported, expected):
+        enable_ollama(monkeypatch, ollama_num_ctx=8192)
+        server = FakeOllamaServer()
+        show_calls: list = []
+        show = httpx.Response(200, json={"model_info": {"llama.context_length": reported}})
+        wrapper = self._wrapper_with_show(server, show, show_calls)
+
+        wrapper.generate_with_fallback(TASK, PROMPT, token_budget=BUDGET)
+
+        assert len(show_calls) == 1
+        assert server.last_chat_payload()["options"]["num_ctx"] == expected
+
+    def test_context_lookup_happens_once_for_the_whole_adapter(self, monkeypatch):
+        enable_ollama(monkeypatch, ollama_num_ctx=8192)
+        server = FakeOllamaServer()
+        show_calls: list = []
+        show = httpx.Response(200, json={"model_info": {"llama.context_length": 4096}})
+        wrapper = self._wrapper_with_show(server, show, show_calls)
+
+        wrapper.generate_with_fallback(TASK, PROMPT, token_budget=BUDGET)
+        wrapper.generate_with_fallback(TASK, PROMPT, token_budget=BUDGET)
+
+        # Exactly one /api/show for the adapter's lifetime; both chats carry
+        # the clamped window.
+        assert len(show_calls) == 1
+        assert len(server.chat_requests) == 2
+        body = json.loads(show_calls[0].content.decode())
+        assert body["model"] == "llama3.2:3b"
+        assert body["name"] == "llama3.2:3b"
+        for request in server.chat_requests:
+            assert json.loads(request.content.decode())["options"]["num_ctx"] == 4096
+
+    @pytest.mark.parametrize(
+        "failure",
+        [
+            httpx.ConnectError("connection refused"),
+            httpx.Response(500, json={"error": "nope"}),
+            httpx.Response(200, text="this is not json"),
+            httpx.Response(200, json=["unexpected"]),
+            httpx.Response(200, json={"model_info": {}}),
+        ],
+        ids=["connect-error", "http-500", "non-json", "wrong-type", "no-context-key"],
+    )
+    def test_lookup_failure_never_raises_and_configured_value_survives(self, monkeypatch, failure):
+        enable_ollama(monkeypatch, ollama_num_ctx=3072)
+        server = FakeOllamaServer()
+        wrapper = self._wrapper_with_show(server, failure, [])
+
+        wrapper.generate_with_fallback(TASK, PROMPT, token_budget=BUDGET)
+
+        assert server.last_chat_payload()["options"]["num_ctx"] == 3072
 
 
 # ---------------------------------------------------------------------------

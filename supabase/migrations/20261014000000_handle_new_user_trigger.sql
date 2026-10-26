@@ -1,7 +1,8 @@
--- Create the handle_new_user trigger that PROJECT_GUIDE.md documents but no
--- migration ever created. Without it, Supabase created auth.users rows on
--- signup while public.profiles stayed empty, so the app had no user record
--- for any registered account (GET /api/v1/profiles/<id> -> 404).
+-- handle_new_user trigger: ensures every auth.users row gets a public.profiles
+-- row on signup, so a registered account never lacks a profile record. Without
+-- it Supabase created auth.users rows on signup while public.profiles stayed
+-- empty, yielding GET /api/v1/profiles/<id> -> 404. Migration-set overview:
+-- docs/development/setup.md §3.
 --
 -- Idempotent: safe to run repeatedly (create or replace / drop trigger if
 -- exists / on conflict do nothing). Never drops anything.
