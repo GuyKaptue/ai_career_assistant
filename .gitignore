@@ -48,3 +48,7 @@ frontend/.env.local
 .windsurf/
 .trae/
 .augment/
+
+# ---- audit / scratch artifacts ----
+evidence.txt
+nohup.out
