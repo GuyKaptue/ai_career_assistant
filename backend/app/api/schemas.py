@@ -50,7 +50,6 @@ class ErrorResponse(BaseModel):
 
 class HealthResponse(BaseModel):
     status: str
-    service: str
 
 
 class ReadyResponse(BaseModel):
@@ -58,6 +57,7 @@ class ReadyResponse(BaseModel):
 
     status: str
     checks: dict[str, Any]
+    ai: dict[str, Any] | None = None
 
 
 COMMON_ERROR_RESPONSES: dict[int | str, dict[str, Any]] = {

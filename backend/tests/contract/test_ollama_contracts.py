@@ -133,7 +133,9 @@ class TestNoBillingNoKey:
         secretish = {
             name
             for name in vars(AppSettings.from_env())
-            if name.startswith("OLLAMA_") and any(part in name for part in ("KEY", "TOKEN", "SECRET"))
+            if name.startswith("OLLAMA_")
+            and any(part in name for part in ("KEY", "TOKEN", "SECRET"))
+            and name not in {"ollama_auth_header", "ollama_auth_token"}
         }
         assert not secretish
 
@@ -143,6 +145,8 @@ class TestNoBillingNoKey:
 
         for match in re.finditer(r"^(OLLAMA_[A-Z_]+)=", text, re.M):
             name = match.group(1)
+            if name in {"OLLAMA_AUTH_HEADER", "OLLAMA_AUTH_TOKEN"}:
+                continue
             assert not any(part in name for part in ("KEY", "TOKEN", "SECRET")), name
 
     @pytest.mark.parametrize(

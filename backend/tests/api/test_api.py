@@ -19,6 +19,22 @@ def test_health_endpoint():
     assert response.json()["status"] == "ok"
 
 
+def test_health_head_endpoint():
+    response = client.head("/health")
+
+    assert response.status_code == 200
+
+
+def test_api_health_endpoints():
+    for path in ("/api/health",):
+        get_response = client.get(path)
+        head_response = client.head(path)
+
+        assert get_response.status_code == 200
+        assert get_response.json()["status"] == "ok"
+        assert head_response.status_code == 200
+
+
 def test_template_listing_endpoint():
     response = client.get("/api/v1/templates")
 

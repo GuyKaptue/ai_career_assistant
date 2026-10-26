@@ -173,13 +173,13 @@ class TestFallsBackToHuggingFace:
 
         assert result["fallback_chain"] == ["ollama:llama3.2:3b"]
 
-    def test_router_state_is_untouched_on_fallback(self, monkeypatch):
+    def test_router_state_opens_on_availability_fallback(self, monkeypatch):
         enable_ollama(monkeypatch)
         server = FakeOllamaServer([http(404)])
         wrapper = make_wrapper(server)
         assert wrapper.circuit_state == "CLOSED"
         wrapper.generate_with_fallback(TASK, PROMPT, token_budget=BUDGET)
-        assert wrapper.circuit_state == "CLOSED"
+        assert wrapper.circuit_state == "OPEN"
 
 
 # ---------------------------------------------------------------------------
@@ -189,19 +189,17 @@ class TestCircuitBreaker:
     def _wrapper(self, script, **kwargs):
         return make_wrapper(FakeOllamaServer(script), **kwargs)
 
-    def test_three_availability_failures_open_the_breaker(self, monkeypatch):
+    def test_a_single_availability_failure_opens_the_breaker(self, monkeypatch):
         enable_ollama(monkeypatch)
         wrapper = self._wrapper([connect_refused()], sleep=RecordingSleep())
-        for _ in range(3):
-            wrapper.generate_with_fallback(TASK, PROMPT, token_budget=BUDGET)
+        wrapper.generate_with_fallback(TASK, PROMPT, token_budget=BUDGET)
         assert wrapper.circuit_state == "OPEN"
 
     def test_open_breaker_makes_zero_ollama_requests_and_counts_a_skip(self, monkeypatch):
         enable_ollama(monkeypatch)
         server = FakeOllamaServer([connect_refused()])
         wrapper = make_wrapper(server, sleep=RecordingSleep())
-        for _ in range(3):
-            wrapper.generate_with_fallback(TASK, PROMPT, token_budget=BUDGET)
+        wrapper.generate_with_fallback(TASK, PROMPT, token_budget=BUDGET)
         requests_before = len(server.chat_requests)
 
         skips: list[int] = []
@@ -228,7 +226,7 @@ class TestCircuitBreaker:
         wrapper._breaker._last_failure_time = now()
         requests_before = len(server.chat_requests)
 
-        # Inside the reset timeout (30 s): fail fast, no probe request at all.
+        # Inside the reset timeout (60 s): fail fast, no probe request at all.
         now.advance(10.0)
         wrapper.generate_with_fallback(TASK, PROMPT, token_budget=BUDGET)
         assert len(server.chat_requests) == requests_before
@@ -236,7 +234,7 @@ class TestCircuitBreaker:
         # Past it: exactly one probe request. A successful probe from OPEN
         # lands on HALF_OPEN (the documented half-open probe state); it takes a
         # second success to close the breaker fully.
-        now.advance(40.0)
+        now.advance(55.0)
         result = wrapper.generate_with_fallback(TASK, PROMPT, token_budget=BUDGET)
         assert len(server.chat_requests) == requests_before + 1
         assert wrapper.circuit_state == "HALF_OPEN"
@@ -257,7 +255,7 @@ class TestCircuitBreaker:
 
         wrapper._breaker._state = "OPEN"
         wrapper._breaker._last_failure_time = now()
-        now.advance(40.0)
+        now.advance(65.0)
 
         wrapper.generate_with_fallback(TASK, PROMPT, token_budget=BUDGET)
 
@@ -276,7 +274,7 @@ class TestCircuitBreaker:
         assert len(server.chat_requests) == 3
 
     @pytest.mark.parametrize(
-        "script", [connect_refused(), http(429), None], ids=["unavailable", "rate_limited", "timeout"]
+        "script", [connect_refused(), None], ids=["unavailable", "server_error"]
     )
     def test_availability_classes_open_the_breaker(self, monkeypatch, script):
         enable_ollama(monkeypatch)

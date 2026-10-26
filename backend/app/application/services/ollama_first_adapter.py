@@ -48,9 +48,9 @@ logger = logging.getLogger(__name__)
 
 OLLAMA_MODEL_ID_PREFIX: Final = "ollama:"
 
-_BREAKER_FAILURE_THRESHOLD: Final = 3
-_BREAKER_RECOVERY_SECONDS: Final = 30.0
-_BREAKER_FAILURE_CLASSES: Final = frozenset({MODEL_UNAVAILABLE, TIMEOUT, RATE_LIMITED})
+_BREAKER_FAILURE_THRESHOLD: Final = 1
+_BREAKER_RECOVERY_SECONDS: Final = 60.0
+_BREAKER_FAILURE_CLASSES: Final = frozenset({MODEL_UNAVAILABLE})
 _CIRCUIT_OPEN_REASON: Final = f"{MODEL_UNAVAILABLE}: ollama circuit breaker open"
 
 
@@ -206,6 +206,12 @@ class OllamaFirstAdapter:
             )
         except AIProviderError as exc:
             failure_class = classify_failure(exc)
+            # A connect timeout is a connect failure, not a hung read: treat it
+            # as MODEL_UNAVAILABLE so the breaker trips and we stop retrying a
+            # dead tunnel. A read timeout (hung generation) stays TIMEOUT and
+            # does not trip the breaker.
+            if failure_class == TIMEOUT and "connection timed out" in str(exc).lower():
+                failure_class = MODEL_UNAVAILABLE
             if failure_class in _BREAKER_FAILURE_CLASSES:
                 self._breaker.mark_failure(failure_class)
             else:

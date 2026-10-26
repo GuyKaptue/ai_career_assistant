@@ -1,0 +1,49 @@
+services:
+  - type: web
+    name: ai-career-assistant-api
+    runtime: python
+    plan: free
+    region: frankfurt
+    rootDir: backend
+    buildCommand: pip install --upgrade pip && pip install -r requirements.txt
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT --proxy-headers --forwarded-allow-ips="*"
+    healthCheckPath: /health
+    autoDeployTrigger: commit
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.13.7"
+      - key: USE_OLLAMA
+        value: "false"
+      # Optional: remote tunneled Ollama (see docs/DEPLOYMENT.md). Leave unset for HF-only.
+      - key: OLLAMA_BASE_URL
+        sync: false
+      - key: OLLAMA_MODEL
+        sync: false
+      - key: OLLAMA_AUTH_HEADER
+        value: X-Ollama-Token
+      - key: OLLAMA_AUTH_TOKEN
+        sync: false
+      # Secrets: set in the Render dashboard, never in this file
+      - key: SUPABASE_URL
+        sync: false
+      - key: SUPABASE_ANON_KEY
+        sync: false
+      - key: SUPABASE_SERVICE_ROLE_KEY
+        sync: false
+      - key: SUPABASE_JWT_SECRET
+        sync: false
+      - key: SUPABASE_DB_URL
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: ADZUNA_APP_ID
+        sync: false
+      - key: ADZUNA_APP_KEY
+        sync: false
+      - key: CORS_ORIGINS
+        sync: false
+      # HF_TOKEN is set in the Render dashboard; use a fine-grained token with inference permission only.
+      - key: HF_TOKEN
+        sync: false
+      # Leave HF_TOKEN / HUGGINGFACE_TOKEN unset for a public demo so strangers
+      # cannot use your Hugging Face quota. ADZUNA_* remain optional.

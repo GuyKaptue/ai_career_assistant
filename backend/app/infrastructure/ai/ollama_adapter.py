@@ -155,6 +155,8 @@ class OllamaInferenceAdapter:
         client: httpx.Client | None = None,
         timeout_seconds: float | None = None,
         connect_timeout_seconds: float | None = None,
+        auth_header: str | None = None,
+        auth_token: str | None = None,
         keep_alive: str | None = None,
         default_temperature: float | None = None,
         max_retries: int = _DEFAULT_MAX_RETRIES,
@@ -172,6 +174,10 @@ class OllamaInferenceAdapter:
         self._connect_timeout = (
             connect_timeout_seconds if connect_timeout_seconds is not None else settings.ollama_connect_timeout_seconds
         )
+        resolved_header = auth_header if auth_header is not None else settings.ollama_auth_header
+        resolved_token = auth_token if auth_token is not None else settings.ollama_auth_token
+        self._auth_header = resolved_header.strip() if isinstance(resolved_header, str) and resolved_header.strip() else None
+        self._auth_token = resolved_token.strip() if isinstance(resolved_token, str) and resolved_token.strip() else None
         self._keep_alive = keep_alive if keep_alive is not None else settings.ollama_keep_alive
         self._temperature = default_temperature if default_temperature is not None else settings.ollama_temperature
         if read_timeout <= 0 or self._connect_timeout <= 0:
@@ -192,6 +198,8 @@ class OllamaInferenceAdapter:
             connect_timeout=self._connect_timeout,
             read_timeout=read_timeout,
         )
+        if self._auth_header and self._auth_token:
+            self._client.headers[self._auth_header] = self._auth_token
         self._closed = False
 
     def close(self) -> None:

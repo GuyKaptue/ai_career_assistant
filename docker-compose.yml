@@ -37,7 +37,7 @@ services:
       # backend tries to serve are the same variable, never two hand-edited names.
       OLLAMA_MODEL: ${OLLAMA_MODEL:-llama3.2:3b}
       # Defaults mirror backend/app/core/config.py.
-      OLLAMA_TIMEOUT_SECONDS: ${OLLAMA_TIMEOUT_SECONDS:-120}
+      OLLAMA_TIMEOUT_SECONDS: ${OLLAMA_TIMEOUT_SECONDS:-10}
       OLLAMA_CONNECT_TIMEOUT_SECONDS: ${OLLAMA_CONNECT_TIMEOUT_SECONDS:-3}
       OLLAMA_KEEP_ALIVE: ${OLLAMA_KEEP_ALIVE:-5m}
       OLLAMA_TEMPERATURE: ${OLLAMA_TEMPERATURE:-0.3}
